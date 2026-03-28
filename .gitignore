@@ -1,0 +1,25 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
+
+# Data og modell – for store/sensitive for Git
+nba_kamper_raw.csv
+nba_features.csv
+nba_modell.pkl
+value_bets_idag.csv
+value_bets_med_skadefilter.csv
+
+# Bankroll og bet-historikk – personlig data
+bankroll.json
+bets.json
+
+# Dashboard (genereres automatisk)
+dashboard.html
+dashboard_tom.html
+
+# macOS
+.DS_Store
