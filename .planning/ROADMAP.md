@@ -28,7 +28,16 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. A fresh `git clone` + `pip install` can load `nba_modell.pkl` without an `ImportError`, because `modell_utils.py` is tracked in git
   2. No Odds API key is hardcoded in source; `04_value_detector.py` reads it from an environment variable, and the previously-exposed key has been rotated so the old value is dead
   3. The claims in `KALIBRERING_RAPPORT.md`/`ENDRINGER_SUMMARY.txt` are reconciled with the running code — either applied so code matches docs, or the docs are explicitly marked superseded — so there is exactly one source of truth for "what config is actually live"
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Pre-flight safety gate: working-tree disposition, scratch-artifact decision, python-dotenv legitimacy approval (checkpoints only)
+- [ ] 01-02-PLAN.md — HYG-02: harden .gitignore against scratch artifacts, track modell_utils.py, prove fresh-clone import
+- [ ] 01-03-PLAN.md — HYG-01 (code): fail-fast ODDS_API_NOKKEL env-var load via python-dotenv, .env.example, corrected setup guide
+- [ ] 01-04-PLAN.md — HYG-03: mark KALIBRERING_RAPPORT.md and ENDRINGER_SUMMARY.txt as superseded/never-deployed and commit them
+- [ ] 01-05-PLAN.md — HYG-01 (human): rotate the exposed key, then run the full 01-VALIDATION.md phase gate (checkpoints + battery)
+
+Plans are strictly sequential (waves 1-5): every plan commits against one shared git index, and the working tree holds a ~100MB scratch file plus ~1200 lines of unrelated uncommitted work, so concurrent staging is unsafe.
 
 ### Phase 2: Shared Core Extraction & Test Foundation
 **Goal**: Feature engineering, team-name resolution, and value/stake strategy logic exist in exactly one place, imported identically by the live path and the (future) backtest path, with automated tests protecting the money-math functions.
@@ -82,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Repo Hygiene & Config Remediation | 0/TBD | Not started | - |
+| 1. Repo Hygiene & Config Remediation | 0/5 | Planned | - |
 | 2. Shared Core Extraction & Test Foundation | 0/TBD | Not started | - |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
