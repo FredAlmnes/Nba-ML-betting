@@ -1,0 +1,88 @@
+# NBA Value Betting Bot
+
+## What This Is
+
+A personal, paper-trading NBA moneyline value-betting system: it trains a calibrated XGBoost model on historical NBA team stats, compares model-implied win probabilities against live bookmaker odds to flag "value" bets, filters out bets where a key player is injured, and tracks a virtual bankroll with half-Kelly stake sizing. No real money is at risk yet — it's a single-user research/validation project run manually or via a daily script.
+
+## Core Value
+
+The bot must demonstrate a **positive, validated ROI over a proper historical backtest** before it's trusted with anything beyond paper trading. Win rate or model accuracy alone don't matter if the actual betting strategy (value threshold + staking + filters) doesn't make money against real historical odds.
+
+## Requirements
+
+### Validated
+
+<!-- Existing technical capabilities — confirmed to run, NOT confirmed to be profitable. -->
+
+- ✓ Historical data ingestion from `nba_api` (game-level box scores, reshaped home/away) — existing (`01_hent_data.py`)
+- ✓ Leakage-safe rolling-window feature engineering (10-game rolling averages, `shift(1)`) — existing (`02_feature_engineering.py`)
+- ✓ XGBoost classifier training with isotonic calibration, time-series train/test split — existing (`03_tren_modell.py`, `modell_utils.py`)
+- ✓ Live odds retrieval (The Odds API) and value/EV scoring against the calibrated model — existing (`04_value_detector.py`)
+- ✓ Injury-risk filtering based on top-3 minutes players' recent availability — existing (`05_skadefilter.py`)
+- ✓ Daily orchestration: settles pending bets, runs the pipeline, sizes stakes via half-Kelly, persists bankroll/bet ledger as JSON, renders a static HTML dashboard — existing (`06_bot.py`)
+
+### Active
+
+<!-- Current scope. Building toward these. -->
+
+- [ ] A historical backtesting framework that replays the value-betting strategy (model + value threshold + odds range + injury filter + Kelly staking) against historical odds data (The Odds API historical endpoint) and reports realistic ROI/drawdown — not just raw model classification metrics
+- [ ] A validated, data-driven set of strategy parameters (value threshold, odds range, stake sizing) chosen because backtesting shows they work — not guessed/hand-tuned
+- [ ] Root-cause investigation into why the current live config underperforms — model quality, feature set, calibration, threshold choice, or a combination — informed by the backtest rather than assumption
+- [ ] Resolution of the known drift between documented fixes (`KALIBRERING_RAPPORT.md`) and what's actually running in `04_value_detector.py`
+- [ ] Fix for the leaked live Odds API key committed to a public GitHub repo (`04_value_detector.py:30`) — move to environment variable, rotate the key
+- [ ] `modell_utils.py` tracked in git (currently untracked; a fresh clone breaks because `nba_modell.pkl` can't be unpickled without it)
+- [ ] Clear before/after evidence (paper-trading results, backtest results) that the rebuilt/fixed system beats the current losing baseline
+
+### Out of Scope
+
+<!-- Explicit boundaries. Includes reasoning to prevent re-adding. -->
+
+- Real-money betting / live wagering integration — not until paper-trading + backtest show sustained positive ROI
+- Spread and totals markets — starting moneyline-only for v1; may be added later once the moneyline strategy is validated
+- Multi-user / hosted service — this is a single-user personal tool, not a product
+
+## Context
+
+- **Current state is losing money (in paper trading):** the tracked virtual bankroll fell from 1000 kr to 74.88 kr under the currently-running configuration.
+- **A known fix was never applied:** `ENDRINGER_SUMMARY.txt` / `KALIBRERING_RAPPORT.md` describe raising `MIN_VALUE_TERSKEL` to 0.20, lowering `MAX_ODDS` to 2.50, and adding calibration/confidence filters — but `04_value_detector.py` still runs the old values (`MIN_VALUE_TERSKEL=0.05`, `MAX_ODDS=4.00`). The user was not aware this fix had never made it into the running code.
+- **No strategy backtest exists today.** The model is only evaluated with classification metrics (accuracy/log-loss/Brier) on a 2-month holdout at training time. There has never been a backtest of the full betting decision pipeline (value detection + odds filtering + Kelly staking) against historical odds, which likely explains why threshold tuning has been guesswork.
+- **Historical odds data is available** via The Odds API's historical endpoint, making a proper backtest feasible.
+- **Codebase is a flat, numbered-script batch pipeline** (`01_` → `06_`), no package structure, Norwegian identifiers throughout, no automated tests, no lint/format tooling. Full details in `.planning/codebase/`.
+- **Known code-quality issues** (from codebase mapping): feature-engineering logic duplicated between `02_feature_engineering.py` and `04_value_detector.py` (must be kept in sync manually); team-name lookup logic independently reimplemented in four different files; all pipeline scripts execute top-level code with no `main()` guard (untestable, unimportable).
+- **User is open to rethinking the approach** — not committed to preserving the current architecture if backtesting reveals a more fundamental problem (model, features, or data) rather than just bad thresholds.
+
+## Constraints
+
+- **Scope**: Moneyline only for v1 — spread/totals explicitly deferred, not because they're hard but to keep validation focused on one strategy at a time.
+- **Risk**: No real-money betting until backtested + paper-traded evidence of positive ROI exists — this is a hard gate, not a suggestion.
+- **Data**: Historical odds backtesting depends on The Odds API's historical endpoint (rate limits / API cost apply — same key that needs rotating).
+- **Language/style**: Existing codebase uses Norwegian identifiers and comments throughout; new/modified code should stay consistent with this unless a decision is made to deviate.
+
+## Key Decisions
+
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| Backtest the full strategy against historical odds before further threshold tuning | Current losses trace to unvalidated threshold changes and a fix that was written but never deployed; guessing again would repeat the same mistake | — Pending |
+| Start with moneyline only, defer spread/totals | Keeps validation focused; can expand once moneyline strategy is proven | — Pending |
+| Fix leaked API key, untracked `modell_utils.py`, and doc/code drift as part of this milestone | Flagged as critical during codebase mapping; leaked key is on a public repo and untracked file breaks fresh clones | — Pending |
+| Stay open to architectural changes if backtesting points to a deeper issue (model/features/data), not just thresholds | User explicitly does not want to just re-tune the same broken structure if that's not where the problem is | — Pending |
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
+---
+*Last updated: 2026-08-19 after initialization*
