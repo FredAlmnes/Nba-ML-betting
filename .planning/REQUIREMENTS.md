@@ -68,34 +68,34 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Populated during roadmap creation.
+Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HYG-01 | TBD | Pending |
-| HYG-02 | TBD | Pending |
-| HYG-03 | TBD | Pending |
-| CORE-01 | TBD | Pending |
-| CORE-02 | TBD | Pending |
-| CORE-03 | TBD | Pending |
-| CORE-04 | TBD | Pending |
-| CALIB-01 | TBD | Pending |
-| CALIB-02 | TBD | Pending |
-| ODDS-01 | TBD | Pending |
-| ODDS-02 | TBD | Pending |
-| BT-01 | TBD | Pending |
-| BT-02 | TBD | Pending |
-| BT-03 | TBD | Pending |
-| BT-04 | TBD | Pending |
-| BT-05 | TBD | Pending |
-| BT-06 | TBD | Pending |
-| BT-07 | TBD | Pending |
+| HYG-01 | Phase 1 | Pending |
+| HYG-02 | Phase 1 | Pending |
+| HYG-03 | Phase 1 | Pending |
+| CORE-01 | Phase 2 | Pending |
+| CORE-02 | Phase 2 | Pending |
+| CORE-03 | Phase 2 | Pending |
+| CORE-04 | Phase 2 | Pending |
+| CALIB-01 | Phase 3 | Pending |
+| CALIB-02 | Phase 3 | Pending |
+| ODDS-01 | Phase 4 | Pending |
+| ODDS-02 | Phase 4 | Pending |
+| BT-01 | Phase 5 | Pending |
+| BT-02 | Phase 5 | Pending |
+| BT-03 | Phase 5 | Pending |
+| BT-04 | Phase 5 | Pending |
+| BT-05 | Phase 5 | Pending |
+| BT-06 | Phase 5 | Pending |
+| BT-07 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 18 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 18 ⚠️ (will be resolved by roadmap creation)
+- Mapped to phases: 18/18
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-08-19*
-*Last updated: 2026-08-19 after initial definition*
+*Last updated: 2026-08-19 after roadmap creation*
