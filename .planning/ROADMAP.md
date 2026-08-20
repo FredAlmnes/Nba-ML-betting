@@ -13,7 +13,7 @@ This milestone turns an already-running (and currently losing) paper-trading bot
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Repo Hygiene & Config Remediation** - Fresh clone works, no leaked secrets, docs match running config
+- [x] **Phase 1: Repo Hygiene & Config Remediation** - Fresh clone works, no leaked secrets, docs match running config (completed 2026-08-20)
 - [ ] **Phase 2: Shared Core Extraction & Test Foundation** - Feature/team/strategy logic lives in one place with tests, no more silent drift
 - [ ] **Phase 3: Calibration Remediation** - Isotonic calibrator fit/evaluated on properly separated data, closing a confirmed leak
 - [ ] **Phase 4: Historical Odds Acquisition & Live Refactor** - Historical odds permanently archived; live bot runs on the shared core
@@ -53,7 +53,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-05-PLAN.md — HYG-01 (human): rotate the exposed key, then run the full 01-VALIDATION.md phase gate (checkpoints + battery)
+- [x] 01-05-PLAN.md — HYG-01 (human): rotate the exposed key, then run the full 01-VALIDATION.md phase gate (checkpoints + battery)
 
 Plans are strictly sequential (waves 1-5): every plan commits against one shared git index, and the working tree holds a ~100MB scratch file plus ~1200 lines of unrelated uncommitted work, so concurrent staging is unsafe.
 
@@ -121,7 +121,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Repo Hygiene & Config Remediation | 4/5 | In Progress|  |
+| 1. Repo Hygiene & Config Remediation | 5/5 | Complete   | 2026-08-20 |
 | 2. Shared Core Extraction & Test Foundation | 0/TBD | Not started | - |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
