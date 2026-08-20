@@ -37,7 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Pre-flight safety gate: working-tree disposition, scratch-artifact decision, python-dotenv legitimacy approval (checkpoints only)
+- [x] 01-01-PLAN.md — Pre-flight safety gate: working-tree disposition, scratch-artifact decision, python-dotenv legitimacy approval (checkpoints only)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -121,7 +121,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Repo Hygiene & Config Remediation | 0/5 | Planned | - |
+| 1. Repo Hygiene & Config Remediation | 1/5 | In Progress|  |
 | 2. Shared Core Extraction & Test Foundation | 0/TBD | Not started | - |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
