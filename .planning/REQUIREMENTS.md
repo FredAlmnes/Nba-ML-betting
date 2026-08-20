@@ -11,7 +11,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **HYG-01**: The Odds API key is loaded from an environment variable (not hardcoded in source) and the previously-exposed key is rotated
 - [x] **HYG-02**: `modell_utils.py` is tracked in git so a fresh clone can unpickle `nba_modell.pkl` without breaking
-- [ ] **HYG-03**: The documented fix in `KALIBRERING_RAPPORT.md`/`ENDRINGER_SUMMARY.txt` is reconciled with the running code — either applied, or explicitly superseded once backtest-validated values exist, so docs and running config never silently diverge again
+- [x] **HYG-03**: The documented fix in `KALIBRERING_RAPPORT.md`/`ENDRINGER_SUMMARY.txt` is reconciled with the running code — either applied, or explicitly superseded once backtest-validated values exist, so docs and running config never silently diverge again
 
 ### Shared Core (prevents a third instance of the drift that already happened twice)
 
@@ -74,7 +74,7 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 |-------------|-------|--------|
 | HYG-01 | Phase 1 | Complete |
 | HYG-02 | Phase 1 | Complete |
-| HYG-03 | Phase 1 | Pending |
+| HYG-03 | Phase 1 | Complete |
 | CORE-01 | Phase 2 | Pending |
 | CORE-02 | Phase 2 | Pending |
 | CORE-03 | Phase 2 | Pending |

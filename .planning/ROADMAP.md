@@ -49,7 +49,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-04-PLAN.md — HYG-03: mark KALIBRERING_RAPPORT.md and ENDRINGER_SUMMARY.txt as superseded/never-deployed and commit them
+- [x] 01-04-PLAN.md — HYG-03: mark KALIBRERING_RAPPORT.md and ENDRINGER_SUMMARY.txt as superseded/never-deployed and commit them
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -121,7 +121,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Repo Hygiene & Config Remediation | 3/5 | In Progress|  |
+| 1. Repo Hygiene & Config Remediation | 4/5 | In Progress|  |
 | 2. Shared Core Extraction & Test Foundation | 0/TBD | Not started | - |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
