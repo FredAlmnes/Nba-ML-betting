@@ -20,6 +20,9 @@ The bot must demonstrate a **positive, validated ROI over a proper historical ba
 - ✓ Live odds retrieval (The Odds API) and value/EV scoring against the calibrated model — existing (`04_value_detector.py`)
 - ✓ Injury-risk filtering based on top-3 minutes players' recent availability — existing (`05_skadefilter.py`)
 - ✓ Daily orchestration: settles pending bets, runs the pipeline, sizes stakes via half-Kelly, persists bankroll/bet ledger as JSON, renders a static HTML dashboard — existing (`06_bot.py`)
+- ✓ Odds API key loaded from an environment variable (not hardcoded), exposed key rotated — Phase 1
+- ✓ `modell_utils.py` tracked in git so a fresh clone can unpickle `nba_modell.pkl` — Phase 1
+- ✓ `KALIBRERING_RAPPORT.md`/`ENDRINGER_SUMMARY.txt` marked superseded/never-deployed, no longer silently implying their proposed thresholds are live — Phase 1
 
 ### Active
 
@@ -28,9 +31,6 @@ The bot must demonstrate a **positive, validated ROI over a proper historical ba
 - [ ] A historical backtesting framework that replays the value-betting strategy (model + value threshold + odds range + injury filter + Kelly staking) against historical odds data (The Odds API historical endpoint) and reports realistic ROI/drawdown — not just raw model classification metrics
 - [ ] A validated, data-driven set of strategy parameters (value threshold, odds range, stake sizing) chosen because backtesting shows they work — not guessed/hand-tuned
 - [ ] Root-cause investigation into why the current live config underperforms — model quality, feature set, calibration, threshold choice, or a combination — informed by the backtest rather than assumption
-- [ ] Resolution of the known drift between documented fixes (`KALIBRERING_RAPPORT.md`) and what's actually running in `04_value_detector.py`
-- [ ] Fix for the leaked live Odds API key committed to a public GitHub repo (`04_value_detector.py:30`) — move to environment variable, rotate the key
-- [ ] `modell_utils.py` tracked in git (currently untracked; a fresh clone breaks because `nba_modell.pkl` can't be unpickled without it)
 - [ ] Clear before/after evidence (paper-trading results, backtest results) that the rebuilt/fixed system beats the current losing baseline
 
 ### Out of Scope
@@ -43,6 +43,7 @@ The bot must demonstrate a **positive, validated ROI over a proper historical ba
 
 ## Context
 
+- **Phase 1 complete (2026-08-20):** repo hygiene fixed. Leaked Odds API key rotated and moved to env var (`ODDS_API_NOKKEL` via `python-dotenv`); `modell_utils.py` tracked; doc/code drift resolved by marking the never-deployed fix superseded rather than applying its unvalidated numbers. Running thresholds intentionally left unchanged (`MIN_VALUE_TERSKEL=0.05`, `MAX_ODDS=4.00`) — validated values still come from Phase 5's backtest, not from this cleanup. Two items deferred by explicit decision: git-history scrubbing of the old key (destructive, needs separate approval) and deletion of ~471MB of local scratch artifacts (gitignored only, not deleted).
 - **Current state is losing money (in paper trading):** the tracked virtual bankroll fell from 1000 kr to 74.88 kr under the currently-running configuration.
 - **A known fix was never applied:** `ENDRINGER_SUMMARY.txt` / `KALIBRERING_RAPPORT.md` describe raising `MIN_VALUE_TERSKEL` to 0.20, lowering `MAX_ODDS` to 2.50, and adding calibration/confidence filters — but `04_value_detector.py` still runs the old values (`MIN_VALUE_TERSKEL=0.05`, `MAX_ODDS=4.00`). The user was not aware this fix had never made it into the running code.
 - **No strategy backtest exists today.** The model is only evaluated with classification metrics (accuracy/log-loss/Brier) on a 2-month holdout at training time. There has never been a backtest of the full betting decision pipeline (value detection + odds filtering + Kelly staking) against historical odds, which likely explains why threshold tuning has been guesswork.
@@ -64,7 +65,8 @@ The bot must demonstrate a **positive, validated ROI over a proper historical ba
 |----------|-----------|---------|
 | Backtest the full strategy against historical odds before further threshold tuning | Current losses trace to unvalidated threshold changes and a fix that was written but never deployed; guessing again would repeat the same mistake | — Pending |
 | Start with moneyline only, defer spread/totals | Keeps validation focused; can expand once moneyline strategy is proven | — Pending |
-| Fix leaked API key, untracked `modell_utils.py`, and doc/code drift as part of this milestone | Flagged as critical during codebase mapping; leaked key is on a public repo and untracked file breaks fresh clones | — Pending |
+| Fix leaked API key, untracked `modell_utils.py`, and doc/code drift as part of this milestone | Flagged as critical during codebase mapping; leaked key is on a public repo and untracked file breaks fresh clones | ✓ Good — Phase 1 |
+| Defer git-history scrubbing and scratch-artifact deletion rather than doing them autonomously | Both are destructive/irreversible; rotating the key neutralizes the practical risk without a force-push, and scratch deletion needs explicit confirmation | — Pending (user decision) |
 | Stay open to architectural changes if backtesting points to a deeper issue (model/features/data), not just thresholds | User explicitly does not want to just re-tune the same broken structure if that's not where the problem is | — Pending |
 
 ## Evolution
@@ -85,4 +87,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-19 after initialization*
+*Last updated: 2026-08-20 after Phase 1 completion*
