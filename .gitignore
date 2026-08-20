@@ -23,3 +23,11 @@ dashboard_tom.html
 
 # macOS
 .DS_Store
+
+# Lokale build/pip-scratch-artefakter (ikke del av prosjektet)
+_linux_pkgs/
+_pip_tmp/
+_pip_home/
+_wheels/
+_test.bin
+test_write.tmp
