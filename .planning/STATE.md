@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-08-20T19:12:07.885Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-08-20T19:17:35.432Z"
 last_activity: 2026-08-20
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 1 (Repo Hygiene & Config Remediation) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-08-20
 
-Progress: [████░░░░░░] 40%
+Progress: [██████░░░░] 60%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [████░░░░░░] 40%
 
 *Updated after each plan completion*
 | Phase 01 P02 | 12min | 2 tasks | 2 files |
+| Phase 01 P03 | 15min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,8 @@ Recent decisions affecting current work:
 - Roadmap: Project structure mode is Horizontal Layers (technical layers building toward the backtest engine), not vertical end-to-end slices — user's explicit choice.
 - [Phase ?]: Scratch artifacts (_linux_pkgs/, _pip_tmp/, _pip_home/, _wheels/, _test.bin, test_write.tmp) are ignore-only, per 01-01 pre-flight decision — Gitignored to prevent accidental staging; nothing deleted from disk without explicit user confirmation
 - [Phase ?]: modell_utils.py tracked in git with zero code changes (D-04) — Fresh clone can now unpickle nba_modell.pkl via KalibrertModell import — proven empirically via temp-clone test
+- [Phase 01]: ODDS_API_NOKKEL (ASCII) used as the env var name instead of ODDS_API_NØKKEL — bash/zsh cannot export a variable name containing Ø; Python identifier stays API_NØKKEL
+- [Phase 01]: 04_value_detector.py sources the Odds API key from ODDS_API_NOKKEL via python-dotenv, fails fast with sys.exit(1) if unset; KOMME_I_GANG.md updated to teach the .env convention; key rotation on the-odds-api.com remains outstanding (deferred to plan 05)
 
 ### Pending Todos
 
@@ -84,6 +87,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-20T19:12:07.871Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-08-20T19:17:35.425Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
