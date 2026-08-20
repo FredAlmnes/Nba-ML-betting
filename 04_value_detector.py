@@ -11,24 +11,38 @@ fra vår modell.
 Du trenger en gratis API-nøkkel fra:
 https://the-odds-api.com (500 kall/måned gratis)
 
-Sett inn din nøkkel i API_NØKKEL-variabelen under.
+Nøkkelen leses fra miljøvariabelen ODDS_API_NOKKEL via en .env-fil.
+Kopier .env.example til .env og fyll inn din egen nøkkel der.
 """
 
+import os
+import sys
 import requests
 import pickle
 import pandas as pd
 import numpy as np
 from nba_api.stats.endpoints import leaguegamefinder, teamgamelogs
 from nba_api.stats.static import teams
+from modell_utils import KalibrertModell  # nødvendig for å laste pickle
 import time
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # -------------------------------------------------------
 # KONFIGURASJON – ENDRE DISSE
 # -------------------------------------------------------
-API_NØKKEL = "afc4f647c551e760f59f837769f5a3a1"  # the-odds-api.com
+API_NØKKEL = os.environ.get("ODDS_API_NOKKEL")
+if not API_NØKKEL:
+    print("FEIL: Miljøvariabelen ODDS_API_NOKKEL er ikke satt.")
+    print("Kopier .env.example til .env og fyll inn din egen nøkkel:")
+    print("  ODDS_API_NOKKEL=din-nøkkel-her")
+    print("Hent en gratis nøkkel fra https://the-odds-api.com")
+    sys.exit(1)  # NB: bare exit() gir exitkode 0 (=suksess) og gjemmer feilen for 06_bot.py
 MIN_VALUE_TERSKEL = 0.05            # Flagg bets der vi er 5%+ over bookmaker
 MIN_ODDS = 1.50                     # Ikke bett på favoritter med veldig lave odds
+MAX_ODDS = 4.00                     # Ikke bett på store outsidere (over 4x = for usikkert)
 # -------------------------------------------------------
 
 # -------------------------------------------------------
@@ -61,7 +75,8 @@ respons = requests.get(url, params=params)
 if respons.status_code != 200:
     print(f"Feil ved henting av odds: {respons.status_code}")
     print(respons.text)
-    exit()
+    import sys
+    sys.exit(1)  # NB: bare exit() gir exitkode 0 (=suksess) og gjemmer feilen for 06_bot.py
 
 kamper = respons.json()
 print(f"Fant {len(kamper)} NBA-kamper med odds")
@@ -74,11 +89,22 @@ print(f"Gjenstående API-kall denne måneden: {respons.headers.get('x-requests-r
 # -------------------------------------------------------
 print("\nHenter fersk lagstatistikk fra NBA...")
 
+def gjeldende_sesong():
+    """Returnerer NBA-sesongen for inneværende dato, f.eks. '2025-26'."""
+    år = datetime.now().year
+    måned = datetime.now().month
+    # NBA-sesongen starter i oktober – hvis vi er før oktober er vi i fjorårets sesong
+    if måned >= 10:
+        return f"{år}-{str(år + 1)[-2:]}"
+    else:
+        return f"{år - 1}-{str(år)[-2:]}"
+
 def hent_siste_lagstats(team_id, antall_kamper=10):
     """Henter siste N kamper for et lag og beregner snittet."""
+    sesong = gjeldende_sesong()
     logs = teamgamelogs.TeamGameLogs(
         team_id_nullable=team_id,
-        season_nullable="2024-25",
+        season_nullable=sesong,
         season_type_nullable="Regular Season"
     )
     df = logs.get_data_frames()[0].head(antall_kamper)
@@ -205,29 +231,36 @@ for kamp in kamper:
     print(f"  Value:      Hjemme {value_hjemme:+.1%}  |  Borte {value_borte:+.1%}")
     print(f"  Forv. EV:   Hjemme {ev_hjemme:+.1%}  |  Borte {ev_borte:+.1%}")
 
+    # Trekk ut faktisk kampdato fra Odds API (UTC → dato-streng)
+    kamp_dato_str = kamp_tid[:10] if kamp_tid else str(datetime.now().date())
+
     # Flagg value bets
-    if value_hjemme > MIN_VALUE_TERSKEL and beste_hjemme_odds >= MIN_ODDS:
+    if value_hjemme > MIN_VALUE_TERSKEL and MIN_ODDS <= beste_hjemme_odds <= MAX_ODDS:
         value_bets.append({
-            "Kamp": f"{hjemme_navn} vs {borte_navn}",
-            "Bet": f"Hjemme ({hjemme_navn})",
-            "Odds": beste_hjemme_odds,
-            "Bookmaker": beste_hjemme_book,
-            "Modell %": f"{modell_sann_hjemme:.1%}",
-            "Bookmaker %": f"{impl_sann_hjemme:.1%}",
-            "Value": f"{value_hjemme:+.1%}",
-            "Forv. EV": f"{ev_hjemme:+.1%}"
+            "Kamp":         f"{hjemme_navn} vs {borte_navn}",
+            "KampDato":     kamp_dato_str,
+            "Bet":          f"Hjemme ({hjemme_navn})",
+            "Odds":         beste_hjemme_odds,
+            "Bookmaker":    beste_hjemme_book,
+            "Modell_prob":  round(modell_sann_hjemme, 4),   # rå float til Kelly
+            "Modell %":     f"{modell_sann_hjemme:.1%}",
+            "Bookmaker %":  f"{impl_sann_hjemme:.1%}",
+            "Value":        f"{value_hjemme:+.1%}",
+            "Forv. EV":     f"{ev_hjemme:+.1%}"
         })
 
-    if value_borte > MIN_VALUE_TERSKEL and beste_borte_odds >= MIN_ODDS:
+    if value_borte > MIN_VALUE_TERSKEL and MIN_ODDS <= beste_borte_odds <= MAX_ODDS:
         value_bets.append({
-            "Kamp": f"{hjemme_navn} vs {borte_navn}",
-            "Bet": f"Borte ({borte_navn})",
-            "Odds": beste_borte_odds,
-            "Bookmaker": beste_borte_book,
-            "Modell %": f"{modell_sann_borte:.1%}",
-            "Bookmaker %": f"{impl_sann_borte:.1%}",
-            "Value": f"{value_borte:+.1%}",
-            "Forv. EV": f"{ev_borte:+.1%}"
+            "Kamp":         f"{hjemme_navn} vs {borte_navn}",
+            "KampDato":     kamp_dato_str,
+            "Bet":          f"Borte ({borte_navn})",
+            "Odds":         beste_borte_odds,
+            "Bookmaker":    beste_borte_book,
+            "Modell_prob":  round(modell_sann_borte, 4),    # rå float til Kelly
+            "Modell %":     f"{modell_sann_borte:.1%}",
+            "Bookmaker %":  f"{impl_sann_borte:.1%}",
+            "Value":        f"{value_borte:+.1%}",
+            "Forv. EV":     f"{ev_borte:+.1%}"
         })
 
 # -------------------------------------------------------
@@ -237,6 +270,13 @@ print("\n" + "="*60)
 print("OPPSUMMERING: VALUE BETS I DAG")
 print("="*60)
 
+# VIKTIG: skriv alltid til value_bets_idag.csv, også når vi ikke fant noen
+# value bets (f.eks. NBA-sommerpause). Ellers ligger gårsdagens (eller forrige
+# måneds!) fil igjen urørt, og 05/06 vil stille-gjenbruke gamle, allerede
+# spilte kamper som om de var dagens anbefalinger.
+KOLONNER = ["Kamp", "KampDato", "Bet", "Odds", "Bookmaker", "Modell_prob",
+            "Modell %", "Bookmaker %", "Value", "Forv. EV"]
+
 if value_bets:
     value_df = pd.DataFrame(value_bets)
     print(value_df.to_string(index=False))
@@ -244,7 +284,9 @@ if value_bets:
     print(f"\n{len(value_bets)} value bet(s) funnet og lagret til 'value_bets_idag.csv'")
 else:
     print("Ingen value bets funnet i dag med gjeldende terskelverdier.")
-    print(f"(Terskel: {MIN_VALUE_TERSKEL:.0%} value, min odds {MIN_ODDS})")
+    print(f"(Terskel: {MIN_VALUE_TERSKEL:.0%} value, odds mellom {MIN_ODDS}–{MAX_ODDS})")
+    pd.DataFrame(columns=KOLONNER).to_csv("value_bets_idag.csv", index=False)
+    print("'value_bets_idag.csv' tømt/oppdatert (ingen anbefalinger i dag).")
 
 print("\n⚠️  ADVARSEL: Bruk dette som læringsverktøy, ikke som garanti for profitt.")
 print("   Spill alltid ansvarlig og ikke bett mer enn du har råd til å tape.")

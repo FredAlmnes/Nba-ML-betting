@@ -42,7 +42,13 @@ Lager filen `nba_modell.pkl`
 
 ### Steg 4: Finn value bets
 Gå til https://the-odds-api.com og lag en gratis konto.
-Lim inn API-nøkkelen din i `04_value_detector.py` (linje med `API_NØKKEL = ...`)
+Kopier `.env.example` til `.env` og legg nøkkelen din i `ODDS_API_NOKKEL`-linjen:
+
+```
+ODDS_API_NOKKEL=din-nøkkel-her
+```
+
+`.env` er git-ignorert og må aldri committes.
 
 ```bash
 python 04_value_detector.py
