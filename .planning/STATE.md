@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-08-20T18:56:31.958Z"
-last_activity: 2026-08-20 -- Phase 1 execution started
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-08-20T19:12:07.885Z"
+last_activity: 2026-08-20
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 1 (Repo Hygiene & Config Remediation) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 1
-Last activity: 2026-08-20 -- Phase 1 execution started
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-08-20
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 01 P02 | 12min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,8 @@ Recent decisions affecting current work:
 
 - Roadmap: Remediation-first, backtest-second phase order (Hygiene → Shared Core → Calibration → Odds/Refactor → Backtest Engine), per research SUMMARY.md — every phase before the backtest removes an already-confirmed risk (leaked key, untracked file, duplicated logic, calibration leak) that would otherwise poison backtest results.
 - Roadmap: Project structure mode is Horizontal Layers (technical layers building toward the backtest engine), not vertical end-to-end slices — user's explicit choice.
+- [Phase ?]: Scratch artifacts (_linux_pkgs/, _pip_tmp/, _pip_home/, _wheels/, _test.bin, test_write.tmp) are ignore-only, per 01-01 pre-flight decision — Gitignored to prevent accidental staging; nothing deleted from disk without explicit user confirmation
+- [Phase ?]: modell_utils.py tracked in git with zero code changes (D-04) — Fresh clone can now unpickle nba_modell.pkl via KalibrertModell import — proven empirically via temp-clone test
 
 ### Pending Todos
 
@@ -81,6 +84,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-19T10:27:44.089Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-repo-hygiene-config-remediation/01-CONTEXT.md
+Last session: 2026-08-20T19:12:07.871Z
+Stopped at: Completed 01-02-PLAN.md
+Resume file: None

@@ -41,7 +41,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — HYG-02: harden .gitignore against scratch artifacts, track modell_utils.py, prove fresh-clone import
+- [x] 01-02-PLAN.md — HYG-02: harden .gitignore against scratch artifacts, track modell_utils.py, prove fresh-clone import
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -121,7 +121,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Repo Hygiene & Config Remediation | 1/5 | In Progress|  |
+| 1. Repo Hygiene & Config Remediation | 2/5 | In Progress|  |
 | 2. Shared Core Extraction & Test Foundation | 0/TBD | Not started | - |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
