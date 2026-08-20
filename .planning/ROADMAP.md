@@ -121,7 +121,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Repo Hygiene & Config Remediation | 5/5 | Complete   | 2026-08-20 |
+| 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
 | 2. Shared Core Extraction & Test Foundation | 0/TBD | Not started | - |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
