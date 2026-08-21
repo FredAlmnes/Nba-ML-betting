@@ -1,0 +1,2 @@
+# Dev-avhengigheter (kun for testing/utvikling) – requirements.txt forblir kjøretids-kun
+pytest>=9.1.1
