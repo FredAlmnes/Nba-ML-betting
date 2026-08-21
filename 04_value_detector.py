@@ -24,6 +24,7 @@ import numpy as np
 from nba_api.stats.endpoints import leaguegamefinder, teamgamelogs
 from nba_api.stats.static import teams
 from modell_utils import KalibrertModell  # nødvendig for å laste pickle
+from strategy import fjern_vigorish, beregn_value_og_ev
 from config import MIN_VALUE_TERSKEL, MIN_ODDS, MAX_ODDS
 import time
 from datetime import datetime, timedelta
@@ -202,25 +203,11 @@ for kamp in kamper:
     if beste_hjemme_odds == 0 or beste_borte_odds == 0:
         continue
 
-    # Beregn implisitt sannsynlighet fra bookmaker-odds
-    # (odds 2.00 -> 1/2.00 = 50% implisitt sannsynlighet)
-    # NB: summen er >100% pga. bookmakerens margin ("vigorish")
-    impl_sann_hjemme = 1 / beste_hjemme_odds
-    impl_sann_borte  = 1 / beste_borte_odds
-
-    # Normaliser så de summerer til 100%
-    total = impl_sann_hjemme + impl_sann_borte
-    impl_sann_hjemme /= total
-    impl_sann_borte  /= total
-
-    # VALUE = modellens sannsynlighet minus bookmakerens implisitte
-    value_hjemme = modell_sann_hjemme - impl_sann_hjemme
-    value_borte  = modell_sann_borte  - impl_sann_borte
-
-    # Forventet verdi = (modell_sann * odds) - 1
-    # Positivt EV betyr lønnsomt bet på sikt
-    ev_hjemme = (modell_sann_hjemme * beste_hjemme_odds) - 1
-    ev_borte  = (modell_sann_borte  * beste_borte_odds)  - 1
+    # Vig-fri normalisering og value/EV-beregning bor nå i strategy.py, slik
+    # at Phase 5-backtesten regner disse identisk med live-veien.
+    impl_sann_hjemme, impl_sann_borte = fjern_vigorish(beste_hjemme_odds, beste_borte_odds)
+    value_hjemme, ev_hjemme = beregn_value_og_ev(modell_sann_hjemme, beste_hjemme_odds, impl_sann_hjemme)
+    value_borte,  ev_borte  = beregn_value_og_ev(modell_sann_borte,  beste_borte_odds,  impl_sann_borte)
 
     print(f"\n{hjemme_navn} vs {borte_navn}")
     print(f"  Modell:     Hjemme {modell_sann_hjemme:.1%}  |  Borte {modell_sann_borte:.1%}")

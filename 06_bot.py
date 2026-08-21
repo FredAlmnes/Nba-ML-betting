@@ -27,6 +27,7 @@ import time
 from nba_api.stats.endpoints import leaguegamefinder
 from nba_api.stats.static import teams
 from config import KELLY_FRAKSJON, MAX_INNSATS, MIN_INNSATS, STARTKAPITAL
+from strategy import beregn_innsats, finn_bet_nokkel, bygg_bet_nokler, er_duplikat
 
 # -------------------------------------------------------
 # Konfigurasjon
@@ -195,28 +196,8 @@ def sjekk_resultater(bets, bankroll_data):
 # -------------------------------------------------------
 # 2. Beregn innsats med halvt Kelly-kriteriet
 # -------------------------------------------------------
-
-def beregn_innsats(saldo, modell_prob, odds):
-    """
-    Halvt Kelly-kriteriet:
-      f* = (b*p - q) / b   der b = odds-1, p = modellsannsynlighet, q = 1-p
-      innsats = saldo * f* * KELLY_FRAKSJON
-
-    Halvt Kelly gir lavere varians enn fullt Kelly, på bekostning av
-    litt lavere forventet vekst. Anbefaltes bredt i sportsbetting.
-    """
-    b = odds - 1.0          # netto gevinst per krone satset
-    p = modell_prob
-    q = 1.0 - p
-
-    kelly = (b * p - q) / b
-
-    if kelly <= 0:
-        return 0.0          # Negativt Kelly = ingen edge, ikke bett
-
-    innsats = saldo * kelly * KELLY_FRAKSJON
-    innsats = max(MIN_INNSATS, min(MAX_INNSATS, innsats))
-    return round(innsats, 2)
+# beregn_innsats() bor nå i strategy.py (delt med Phase 5-backtesten) —
+# se import øverst i filen.
 
 
 # -------------------------------------------------------
@@ -258,15 +239,13 @@ def plasser_bets(value_bets_df, bets, bankroll_data):
     # kamp_dato slik at vi aldri bet på samme fysiske kamp to ganger, uansett når
     # boten kjørte. Dette er sikkerhetsnettet mot at en gammel/stale rad fra
     # pipelinen (bug fikset 2026-08-19) blir bettet på nytt.
-    allerede_bettet = {
-        (b["kamp"], b["bet"], b.get("kamp_dato") or b["dato"]) for b in bets
-    }
+    allerede_bettet = bygg_bet_nokler(bets)
 
     for _, rad in value_bets_df.iterrows():
         kamp_dato_rad = rad["KampDato"] if "KampDato" in rad and pd.notna(rad["KampDato"]) else str(date.today())
-        nøkkel = (rad["Kamp"], rad["Bet"], kamp_dato_rad)
+        nøkkel = finn_bet_nokkel(rad["Kamp"], rad["Bet"], kamp_dato_rad)
 
-        if nøkkel in allerede_bettet:
+        if er_duplikat(nøkkel, allerede_bettet):
             print(f"  ⏭️  Allerede bettet tidligere – hopper over: {rad['Bet']} ({kamp_dato_rad})")
             continue  # Ikke bett to ganger på samme kamp, uansett dato
 
@@ -275,7 +254,7 @@ def plasser_bets(value_bets_df, bets, bankroll_data):
             continue  # Ikke bett på en kamp som allerede er avviklet
 
         modell_prob = float(rad["Modell_prob"]) if "Modell_prob" in rad and pd.notna(rad["Modell_prob"]) else 0.55
-        innsats = beregn_innsats(saldo, modell_prob, float(rad["Odds"]))
+        innsats = beregn_innsats(saldo, modell_prob, float(rad["Odds"]), KELLY_FRAKSJON, MIN_INNSATS, MAX_INNSATS)
 
         if innsats == 0.0:
             print(f"  ⏭️  Ingen edge (Kelly=0) – hopper over: {rad['Bet']}")
