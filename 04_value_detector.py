@@ -25,6 +25,7 @@ from nba_api.stats.endpoints import leaguegamefinder, teamgamelogs
 from modell_utils import KalibrertModell  # nødvendig for å laste pickle
 from strategy import fjern_vigorish, beregn_value_og_ev
 from teams import finn_lag_id
+from features import STATS_KOLONNER, snitt_fra_kamplogg, bygg_feature_rad
 from config import MIN_VALUE_TERSKEL, MIN_ODDS, MAX_ODDS
 import time
 from datetime import datetime, timedelta
@@ -112,17 +113,7 @@ def hent_siste_lagstats(team_id, antall_kamper=10):
     if len(df) < 3:
         return None
 
-    return {
-        "PTS":        df["PTS"].mean(),
-        "FG_PCT":     df["FG_PCT"].mean(),
-        "FT_PCT":     df["FT_PCT"].mean(),
-        "FG3_PCT":    df["FG3_PCT"].mean(),
-        "REB":        df["REB"].mean(),
-        "AST":        df["AST"].mean(),
-        "TOV":        df["TOV"].mean(),
-        "PLUS_MINUS": df["PLUS_MINUS"].mean(),
-        "VANT":       (df["WL"] == "W").mean()
-    }
+    return snitt_fra_kamplogg(df)
 
 # -------------------------------------------------------
 # 4. Beregn modellens sannsynligheter og finn value
@@ -159,13 +150,7 @@ for kamp in kamper:
         continue
 
     # Bygg feature-rad for modellen
-    feature_rad = {}
-    stats = ["PTS", "FG_PCT", "FT_PCT", "FG3_PCT", "REB", "AST", "TOV", "PLUS_MINUS", "VANT"]
-
-    for stat in stats:
-        feature_rad[f"HJEMME_RULL_{stat}"] = hjemme_stats[stat]
-        feature_rad[f"BORTE_RULL_{stat}"]  = borte_stats[stat]
-        feature_rad[f"DIFF_{stat}"]        = hjemme_stats[stat] - borte_stats[stat]
+    feature_rad = bygg_feature_rad(hjemme_stats, borte_stats)
 
     # Filtrer til bare de feature-kolonnene modellen forventer
     X = pd.DataFrame([feature_rad])[feature_kolonner]

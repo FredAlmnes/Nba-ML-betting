@@ -16,6 +16,7 @@ for å beregne form. Dette er mer realistisk enn sesongsnitt.
 
 import pandas as pd
 import numpy as np
+from features import beregn_lag_form, DIFF_STATS
 
 # -------------------------------------------------------
 # 1. Les inn rådata
@@ -31,70 +32,9 @@ print(f"Antall kamper: {len(df)}")
 # -------------------------------------------------------
 # Vi trenger ett datasett med én rad per lag per kamp (som rådata har),
 # og beregner statistikk BAKOVER i tid (vi kan ikke bruke fremtidig info!)
-
-def beregn_lag_form(df_raw, vindu=10):
-    """
-    Beregner rullende gjennomsnitt for hvert lag.
-
-    'vindu' = antall tidligere kamper å se på.
-    Vi bruker shift(1) for å sikre at vi aldri bruker
-    informasjon fra den kampen vi prøver å spå.
-    """
-    # Bruk de originale per-lag-per-kamp radene
-    # (henter fra hjemme-kolonnene siden vi har dem)
-
-    kolonne_map = {
-        "GAME_ID": "GAME_ID",
-        "GAME_DATE_HJEMME": "DATO",
-        "TEAM_ID_HJEMME": "TEAM_ID",
-        "PTS_HJEMME": "PTS",
-        "FG_PCT_HJEMME": "FG_PCT",
-        "FT_PCT_HJEMME": "FT_PCT",
-        "FG3_PCT_HJEMME": "FG3_PCT",
-        "REB_HJEMME": "REB",
-        "AST_HJEMME": "AST",
-        "TOV_HJEMME": "TOV",
-        "PLUS_MINUS_HJEMME": "PLUS_MINUS",
-        "HJEMME_VANT": "VANT"
-    }
-
-    hjemme_df = df[list(kolonne_map.keys())].rename(columns=kolonne_map).copy()
-    hjemme_df["ER_HJEMME"] = 1
-
-    kolonne_map_borte = {
-        "GAME_ID": "GAME_ID",
-        "GAME_DATE_HJEMME": "DATO",
-        "TEAM_ID_BORTE": "TEAM_ID",
-        "PTS_BORTE": "PTS",
-        "FG_PCT_BORTE": "FG_PCT",
-        "FT_PCT_BORTE": "FT_PCT",
-        "FG3_PCT_BORTE": "FG3_PCT",
-        "REB_BORTE": "REB",
-        "AST_BORTE": "AST",
-        "TOV_BORTE": "TOV",
-        "PLUS_MINUS_BORTE": "PLUS_MINUS",
-    }
-
-    borte_df = df[list(kolonne_map_borte.keys())].rename(columns=kolonne_map_borte).copy()
-    borte_df["VANT"] = 1 - df["HJEMME_VANT"].values  # Bortelaget vant det motsatte
-    borte_df["ER_HJEMME"] = 0
-
-    # Slå sammen til én tabell
-    alle = pd.concat([hjemme_df, borte_df], ignore_index=True)
-    alle = alle.sort_values(["TEAM_ID", "DATO"]).reset_index(drop=True)
-
-    # Beregn rullende statistikk per lag
-    stats_kolonner = ["PTS", "FG_PCT", "FT_PCT", "FG3_PCT", "REB", "AST", "TOV", "PLUS_MINUS", "VANT"]
-
-    for kol in stats_kolonner:
-        # shift(1) betyr "bruk forrige kamps verdi" – ikke dagens
-        # Dette er avgjørende for å unngå "data leakage"!
-        alle[f"RULL_{kol}"] = (
-            alle.groupby("TEAM_ID")[kol]
-            .transform(lambda x: x.shift(1).rolling(window=vindu, min_periods=3).mean())
-        )
-
-    return alle
+#
+# beregn_lag_form bor nå i features.py — den er delt med den live veien
+# (04_value_detector.py) og skal senere brukes uendret av Phase 5s backtest.
 
 print("Beregner rullende lagstatistikk (siste 10 kamper)...")
 lag_stats = beregn_lag_form(df, vindu=10)
@@ -129,7 +69,7 @@ features_df = features_df.merge(borte_features, on="GAME_ID")
 # Modeller liker ofte "differansen mellom lagene" som feature
 # F.eks.: hjemmelagets snittpoeng MINUS bortelagets snittpoeng
 
-for stat in ["PTS", "FG_PCT", "REB", "AST", "TOV", "PLUS_MINUS", "VANT"]:
+for stat in DIFF_STATS:
     hjemme_kol = f"HJEMME_RULL_{stat}"
     borte_kol  = f"BORTE_RULL_{stat}"
     if hjemme_kol in features_df.columns and borte_kol in features_df.columns:
