@@ -82,7 +82,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 02-03-PLAN.md — CORE-01/CORE-03: strategy.py (vig, value/EV, half-Kelly, dedup key) + money-math unit tests; 04 and 06 rewired
+- [x] 02-03-PLAN.md — CORE-01/CORE-03: strategy.py (vig, value/EV, half-Kelly, dedup key) + money-math unit tests; 04 and 06 rewired
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -149,7 +149,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
-| 2. Shared Core Extraction & Test Foundation | 2/6 | In Progress|  |
+| 2. Shared Core Extraction & Test Foundation | 3/6 | In Progress|  |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |
