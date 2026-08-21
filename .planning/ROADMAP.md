@@ -86,7 +86,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 02-04-PLAN.md — CORE-01: teams.py canonical resolver replacing four duplicates; 04, 05, 06 (+ debug_kamp.py per decision) rewired
+- [x] 02-04-PLAN.md — CORE-01: teams.py canonical resolver replacing four duplicates; 04, 05, 06 (+ debug_kamp.py per decision) rewired
 
 **Wave 5** *(blocked on Wave 4)*
 
@@ -149,7 +149,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
-| 2. Shared Core Extraction & Test Foundation | 3/6 | In Progress|  |
+| 2. Shared Core Extraction & Test Foundation | 4/6 | In Progress|  |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |

@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-08-21T10:54:34.692Z"
+last_updated: "2026-08-21T11:03:17.625Z"
 last_activity: 2026-08-21
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 20
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 2 (Shared Core Extraction & Test Foundation) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-08-21
 
-Progress: [███████░░░] 73%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [███████░░░] 73%
 | Phase 02 P01 | 5min | 2 tasks | 1 files |
 | Phase 02 P02 | 12min | 3 tasks | 8 files |
 | Phase 02 P03 | 10min | 3 tasks | 4 files |
+| Phase 02 P04 | 5min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Phase 2 Plan 02: config.py constant formatting adjusted to single-space '= ' style (from 06_bot.py's aligned-padding original) so all 7 strategy constants satisfy the plan's own grep-based acceptance check; values unchanged
 - [Phase 02]: Phase 2 Plan 02: config.py docstring reworded to avoid the literal string ODDS_API_NOKKEL so the file doesn't trip its own no-secrets check; Odds API key remains an env-var read in 04_value_detector.py
 - [Phase 02]: Plan 03: beregn_innsats's null-edge test uses (0.50, 2.00) instead of the plan interfaces block's (0.40, 2.50) example — The latter hits floating-point noise (1.5*0.4 != 0.6 exactly, kelly=7.4e-17), producing 20.0 instead of 0.0; identical behavior existed pre-extraction (verified), not a regression introduced by this plan
+- [Phase 02]: Plan 04: teams.py collapses four duplicate resolvers into one canonical finn_lag()/finn_lag_id() (verbatim-copied from 06_bot.py's most-complete original) - 04_value_detector.py's resolution order and 05_skadefilter.py's abbreviation matching both changed intentionally, proven safe by test_odds_api_navn_loses
+- [Phase 02]: Plan 04: 01_hent_data.py's get_teams() call left untouched - it enumerates all 30 teams for historical data fetch, not a name resolver, and was never one of D-03's four listed duplicates
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-21T10:54:34.684Z
+Last session: 2026-08-21T11:03:17.618Z
 Stopped at: Completed 02-03-PLAN.md
 Resume file: None
