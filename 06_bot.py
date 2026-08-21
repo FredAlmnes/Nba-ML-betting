@@ -25,7 +25,7 @@ from datetime import datetime, date, timedelta
 import pandas as pd
 import time
 from nba_api.stats.endpoints import leaguegamefinder
-from nba_api.stats.static import teams
+from teams import finn_lag
 from config import KELLY_FRAKSJON, MAX_INNSATS, MIN_INNSATS, STARTKAPITAL
 from strategy import beregn_innsats, finn_bet_nokkel, bygg_bet_nokler, er_duplikat
 
@@ -71,24 +71,10 @@ def hent_kampresultat(hjemme_lag, borte_lag, kamp_dato):
     Henter faktisk kampresultat fra NBA API.
     Returnerer 'hjemme', 'borte', eller None (ikke spilt ennå).
     """
-    alle_lag = teams.get_teams()
-
-    # Bygg oppslag: navn/kallenavn -> full lag-info (vi trenger både ID og forkortelse)
-    lag_oppslag = {}
-    for lag in alle_lag:
-        lag_oppslag[lag["full_name"].lower()]   = lag
-        lag_oppslag[lag["nickname"].lower()]     = lag
-        lag_oppslag[lag["abbreviation"].lower()] = lag
-
-    def finn_lag(navn):
-        navn = navn.lower()
-        if navn in lag_oppslag:
-            return lag_oppslag[navn]
-        for nøkkel, info in lag_oppslag.items():
-            if nøkkel in navn or navn in nøkkel:
-                return info
-        return None
-
+    # finn_lag() bor nå i teams.py (delt med 04/05 og Fase 5-backtesten) —
+    # se import øverst i filen. nba_api sitt lag-oppslag hentes nå kun én
+    # gang, ved import av teams.py, i stedet for på hvert
+    # hent_kampresultat-kall.
     hjemme_info = finn_lag(hjemme_lag)
     borte_info  = finn_lag(borte_lag)
 

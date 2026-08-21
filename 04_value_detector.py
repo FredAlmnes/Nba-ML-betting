@@ -22,9 +22,9 @@ import pickle
 import pandas as pd
 import numpy as np
 from nba_api.stats.endpoints import leaguegamefinder, teamgamelogs
-from nba_api.stats.static import teams
 from modell_utils import KalibrertModell  # nødvendig for å laste pickle
 from strategy import fjern_vigorish, beregn_value_og_ev
+from teams import finn_lag_id
 from config import MIN_VALUE_TERSKEL, MIN_ODDS, MAX_ODDS
 import time
 from datetime import datetime, timedelta
@@ -124,15 +124,6 @@ def hent_siste_lagstats(team_id, antall_kamper=10):
         "VANT":       (df["WL"] == "W").mean()
     }
 
-# Lag oppslagstabell: lagnavn -> team_id
-alle_lag = teams.get_teams()
-lag_oppslag = {}
-for lag in alle_lag:
-    lag_oppslag[lag["full_name"].lower()] = lag["id"]
-    lag_oppslag[lag["abbreviation"].lower()] = lag["id"]
-    # Legg til korte navn (f.eks. "lakers" -> Lakers ID)
-    lag_oppslag[lag["nickname"].lower()] = lag["id"]
-
 # -------------------------------------------------------
 # 4. Beregn modellens sannsynligheter og finn value
 # -------------------------------------------------------
@@ -147,14 +138,14 @@ for kamp in kamper:
     borte_navn  = kamp["away_team"]
     kamp_tid    = kamp["commence_time"]
 
-    # Finn lag-IDs
-    hjemme_id = lag_oppslag.get(hjemme_navn.lower().split()[-1])  # Prøv kallenavn
-    borte_id  = lag_oppslag.get(borte_navn.lower().split()[-1])
-
-    if not hjemme_id or not borte_id:
-        # Prøv hele navnet
-        hjemme_id = lag_oppslag.get(hjemme_navn.lower())
-        borte_id  = lag_oppslag.get(borte_navn.lower())
+    # Finn lag-IDs. NB: resolusjonsrekkefølgen endres bevisst her — den gamle
+    # heuristikken prøvde kallenavn (siste ord) først og hele navnet som
+    # fallback; teams.finn_lag() prøver eksakt match (alle tre nøkkeltyper)
+    # først og substreng-fallback etterpå. Begge løser de samme navnene
+    # (bevist av test_odds_api_navn_loses i tests/test_teams.py), men
+    # REKKEFØLGEN de prøver ting i er ulik — se 02-04-SUMMARY.md.
+    hjemme_id = finn_lag_id(hjemme_navn)
+    borte_id  = finn_lag_id(borte_navn)
 
     if not hjemme_id or not borte_id:
         print(f"  Kunne ikke finne lag-ID for: {hjemme_navn} vs {borte_navn}")

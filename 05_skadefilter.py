@@ -13,35 +13,79 @@ Logikk:
 import pandas as pd
 import time
 from nba_api.stats.endpoints import leaguedashplayerstats
-from nba_api.stats.static import teams
+from teams import finn_lag_id
 
 # -------------------------------------------------------
 # Konfigurasjon
 # -------------------------------------------------------
 ANTALL_TOPPSPILLERE = 3     # Sjekk de N viktigste spillerne per lag
 MIN_MINUTTER        = 20    # Ignorer spillere med under 20 min/kamp (sesongsnitt)
-SESONG              = "2024-25"
+
+from datetime import datetime as _dt
+def _gjeldende_sesong():
+    """Beregner NBA-sesong dynamisk, f.eks. '2025-26'."""
+    år = _dt.now().year
+    måned = _dt.now().month
+    if måned >= 10:
+        return f"{år}-{str(år + 1)[-2:]}"
+    else:
+        return f"{år - 1}-{str(år)[-2:]}"
+
+SESONG = _gjeldende_sesong()
+print(f"Bruker sesong: {SESONG}")
 
 # -------------------------------------------------------
-# 1. Hent alle spilleres stats – bare 2 API-kall totalt!
+# 1. Hent alle spilleres stats – sjekker Regular Season + Playoffs
 # -------------------------------------------------------
-print("Henter spillerstatistikk fra NBA (siste 3 kamper)...")
-siste3 = leaguedashplayerstats.LeagueDashPlayerStats(
-    season=SESONG,
-    season_type_all_star="Regular Season",
-    last_n_games=3
-).get_data_frames()[0]
-print(f"  Hentet data for {len(siste3)} spillere")
 
-time.sleep(1.5)
+def _hent_spillerdata(season_type, last_n=0):
+    """Henter spillerdata for gitt season_type. Returnerer tom DataFrame ved feil."""
+    try:
+        df = leaguedashplayerstats.LeagueDashPlayerStats(
+            season=SESONG,
+            season_type_all_star=season_type,
+            last_n_games=last_n
+        ).get_data_frames()[0]
+        time.sleep(1.0)
+        return df
+    except Exception as e:
+        print(f"  (Kunne ikke hente {season_type} data: {e})")
+        return pd.DataFrame()
 
-print("Henter sesongsnitt (for å identifisere toppspillere)...")
-sesong_snitt = leaguedashplayerstats.LeagueDashPlayerStats(
-    season=SESONG,
-    season_type_all_star="Regular Season",
-    last_n_games=0   # 0 = hele sesongen
-).get_data_frames()[0]
-print(f"  Hentet data for {len(sesong_snitt)} spillere\n")
+print("Henter spillerstatistikk fra NBA (siste 3 kamper – Regular Season)...")
+siste3_reg = _hent_spillerdata("Regular Season", last_n=3)
+print(f"  Hentet data for {len(siste3_reg)} spillere (Regular Season)")
+
+print("Henter spillerstatistikk fra NBA (siste 3 kamper – Playoffs)...")
+siste3_play = _hent_spillerdata("Playoffs", last_n=3)
+print(f"  Hentet data for {len(siste3_play)} spillere (Playoffs)")
+
+# Slå sammen: behold Playoffs-data der det finnes, ellers Regular Season
+if not siste3_play.empty and not siste3_reg.empty:
+    siste3 = pd.concat([siste3_play, siste3_reg]).drop_duplicates(subset=["PLAYER_ID"], keep="first").reset_index(drop=True)
+elif not siste3_play.empty:
+    siste3 = siste3_play
+else:
+    siste3 = siste3_reg
+print(f"  Totalt {len(siste3)} unike spillere etter sammenslåing\n")
+
+print("Henter sesongsnitt (for å identifisere toppspillere – Regular Season)...")
+sesong_reg = _hent_spillerdata("Regular Season", last_n=0)
+print("Henter sesongsnitt (Playoffs)...")
+sesong_play = _hent_spillerdata("Playoffs", last_n=0)
+
+# For sesongsnitt: summer minutter fra begge (Regular + Playoffs)
+if not sesong_play.empty and not sesong_reg.empty:
+    sesong_snitt = pd.concat([sesong_play, sesong_reg]).groupby("PLAYER_ID", as_index=False).agg(
+        PLAYER_NAME=("PLAYER_NAME", "first"),
+        TEAM_ID=("TEAM_ID", "first"),
+        MIN=("MIN", "sum")
+    )
+elif not sesong_play.empty:
+    sesong_snitt = sesong_play
+else:
+    sesong_snitt = sesong_reg
+print(f"  Totalt {len(sesong_snitt)} unike spillere i sesongsnitt\n")
 
 # -------------------------------------------------------
 # 2. Finn toppspillere per lag (etter sesongsnitt minutter)
@@ -114,12 +158,11 @@ except FileNotFoundError:
 
 print(f"Sjekker {len(value_df)} value bets\n")
 
-# Lag oppslagstabell: lagnavn -> team_id
-alle_lag = teams.get_teams()
-lag_oppslag = {}
-for lag in alle_lag:
-    lag_oppslag[lag["full_name"]] = lag["id"]
-    lag_oppslag[lag["nickname"]]  = lag["id"]
+if value_df.empty:
+    print("Ingen value bets å sjekke – skriver tom fil og avslutter.")
+    pd.DataFrame(columns=list(value_df.columns) + ["Skadestatus", "Skadeinfo"]).to_csv(
+        "value_bets_med_skadefilter.csv", index=False)
+    exit()
 
 cache          = {}
 filtrerte_bets = []
@@ -142,11 +185,12 @@ for _, rad in value_df.iterrows():
         if lagnavn in cache:
             status = cache[lagnavn]
         else:
-            team_id = None
-            for nøkkel, tid in lag_oppslag.items():
-                if nøkkel.lower() in lagnavn.lower() or lagnavn.lower() in nøkkel.lower():
-                    team_id = tid
-                    break
+            # NB: teams.finn_lag_id() matcher også på forkortelse (abbreviation),
+            # noe denne filens gamle full_name/nickname-only-oppslag ikke gjorde.
+            # Dette utvider treffoverflaten (flere navn matcher), det snevrer
+            # den aldri inn — en bevisst, dokumentert forening, ikke en
+            # regresjon. Se 02-04-SUMMARY.md.
+            team_id = finn_lag_id(lagnavn)
 
             if not team_id:
                 print(f"  ⚠️  Finner ikke team-ID for {lagnavn}")
