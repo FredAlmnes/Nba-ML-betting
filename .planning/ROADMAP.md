@@ -90,7 +90,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 02-05-PLAN.md — CORE-01: features.py with as_of-aware rolling-window computation and single stat list; 02 and 04 rewired, golden-file regression
+- [x] 02-05-PLAN.md — CORE-01: features.py with as_of-aware rolling-window computation and single stat list; 02 and 04 rewired, golden-file regression
 
 **Wave 6** *(blocked on Wave 5)*
 
@@ -149,7 +149,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
-| 2. Shared Core Extraction & Test Foundation | 4/6 | In Progress|  |
+| 2. Shared Core Extraction & Test Foundation | 5/6 | In Progress|  |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |
