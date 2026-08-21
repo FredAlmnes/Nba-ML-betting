@@ -69,7 +69,34 @@ Plans are strictly sequential (waves 1-5): every plan commits against one shared
   3. A `pytest` suite covers the stake-sizing function (`beregn_innsats`) and the bet-dedup logic, and passes
   4. A parity/leakage regression test proves the live path and the backtest path produce an identical bet decision for the same historical date/game
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Pre-flight safety gate: working-tree WIP disposition, debug_kamp.py tracking decision (checkpoints only)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 02-02-PLAN.md — CORE-02/CORE-03: pytest harness (pytest.ini, requirements-dev.txt, tests/) and config.py single source of truth
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 02-03-PLAN.md — CORE-01/CORE-03: strategy.py (vig, value/EV, half-Kelly, dedup key) + money-math unit tests; 04 and 06 rewired
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 02-04-PLAN.md — CORE-01: teams.py canonical resolver replacing four duplicates; 04, 05, 06 (+ debug_kamp.py per decision) rewired
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 02-05-PLAN.md — CORE-01: features.py with as_of-aware rolling-window computation and single stat list; 02 and 04 rewired, golden-file regression
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 02-06-PLAN.md — CORE-04: determinism/leakage regression test (scoped per D-12) + repo-wide de-duplication audit and VALIDATION.md close-out
+
+Plans are strictly sequential (waves 1-6): every plan commits against one shared git index, and `05_skadefilter.py`/`06_bot.py` carry ~1100 lines of the developer's uncommitted work, so concurrent staging is unsafe. Plans 03, 04 and 05 additionally all edit `04_value_detector.py`, which forces sequencing on file ownership alone.
 
 ### Phase 3: Calibration Remediation
 
@@ -122,7 +149,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
-| 2. Shared Core Extraction & Test Foundation | 0/TBD | Not started | - |
+| 2. Shared Core Extraction & Test Foundation | 0/6 | Not started | - |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |
