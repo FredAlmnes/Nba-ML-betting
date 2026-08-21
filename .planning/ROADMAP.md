@@ -74,7 +74,7 @@ Plans are strictly sequential (waves 1-5): every plan commits against one shared
 Plans:
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Pre-flight safety gate: working-tree WIP disposition, debug_kamp.py tracking decision (checkpoints only)
+- [x] 02-01-PLAN.md — Pre-flight safety gate: working-tree WIP disposition, debug_kamp.py tracking decision (checkpoints only)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -149,7 +149,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
-| 2. Shared Core Extraction & Test Foundation | 0/6 | Not started | - |
+| 2. Shared Core Extraction & Test Foundation | 1/6 | In Progress|  |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |
