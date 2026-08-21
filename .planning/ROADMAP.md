@@ -14,7 +14,7 @@ This milestone turns an already-running (and currently losing) paper-trading bot
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Repo Hygiene & Config Remediation** - Fresh clone works, no leaked secrets, docs match running config (completed 2026-08-20)
-- [ ] **Phase 2: Shared Core Extraction & Test Foundation** - Feature/team/strategy logic lives in one place with tests, no more silent drift
+- [x] **Phase 2: Shared Core Extraction & Test Foundation** - Feature/team/strategy logic lives in one place with tests, no more silent drift (completed 2026-08-21)
 - [ ] **Phase 3: Calibration Remediation** - Isotonic calibrator fit/evaluated on properly separated data, closing a confirmed leak
 - [ ] **Phase 4: Historical Odds Acquisition & Live Refactor** - Historical odds permanently archived; live bot runs on the shared core
 - [ ] **Phase 5: Walk-Forward Backtest Engine** - Full strategy replayed chronologically against history with holdout-gated, versioned ROI/drawdown/CLV results
@@ -94,7 +94,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5)*
 
-- [ ] 02-06-PLAN.md — CORE-04: determinism/leakage regression test (scoped per D-12) + repo-wide de-duplication audit and VALIDATION.md close-out
+- [x] 02-06-PLAN.md — CORE-04: determinism/leakage regression test (scoped per D-12) + repo-wide de-duplication audit and VALIDATION.md close-out
 
 Plans are strictly sequential (waves 1-6): every plan commits against one shared git index, and `05_skadefilter.py`/`06_bot.py` carry ~1100 lines of the developer's uncommitted work, so concurrent staging is unsafe. Plans 03, 04 and 05 additionally all edit `04_value_detector.py`, which forces sequencing on file ownership alone.
 
@@ -149,7 +149,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
-| 2. Shared Core Extraction & Test Foundation | 5/6 | In Progress|  |
+| 2. Shared Core Extraction & Test Foundation | 6/6 | Complete   | 2026-08-21 |
 | 3. Calibration Remediation | 0/TBD | Not started | - |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |

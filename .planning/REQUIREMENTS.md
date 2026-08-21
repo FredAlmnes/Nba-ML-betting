@@ -18,7 +18,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CORE-01**: Feature engineering, team-name resolution, and value/stake strategy logic are extracted into shared modules (`features.py`, `strategy.py`, `teams.py`) imported identically by both the live path and the backtest path — no duplicate implementations
 - [x] **CORE-02**: Strategy parameters (`MIN_VALUE_TERSKEL`, `MAX_ODDS`, Kelly fraction) live in a single source-of-truth config imported by both live and backtest, so a backtest always validates what's actually deployed
 - [x] **CORE-03**: Unit tests cover the stake-sizing function (`beregn_innsats`) and bet-dedup logic — first automated tests in this repo
-- [ ] **CORE-04**: A parity/leakage regression test confirms the live path and backtest path produce an identical decision for the same historical date/game
+- [x] **CORE-04**: A parity/leakage regression test confirms the live path and backtest path produce an identical decision for the same historical date/game
 
 ### Calibration Remediation (fixes a confirmed live bug)
 
@@ -78,7 +78,7 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 | CORE-01 | Phase 2 | Complete |
 | CORE-02 | Phase 2 | Complete |
 | CORE-03 | Phase 2 | Complete |
-| CORE-04 | Phase 2 | Pending |
+| CORE-04 | Phase 2 | Complete |
 | CALIB-01 | Phase 3 | Pending |
 | CALIB-02 | Phase 3 | Pending |
 | ODDS-01 | Phase 4 | Pending |

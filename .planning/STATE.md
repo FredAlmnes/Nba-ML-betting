@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-08-21T11:10:33.619Z"
+status: verifying
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-08-21T11:22:33.366Z"
 last_activity: 2026-08-21
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 11
-  completed_plans: 10
-  percent: 20
+  completed_plans: 11
+  percent: 40
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 
 Phase: 2 (Shared Core Extraction & Test Foundation) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-21
 
-Progress: [█████████░] 91%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -61,6 +61,7 @@ Progress: [█████████░] 91%
 | Phase 02 P03 | 10min | 3 tasks | 4 files |
 | Phase 02 P04 | 5min | 3 tasks | 6 files |
 | Phase 02 P05 | 8min | 3 tasks | 4 files |
+| Phase 02 P06 | 25min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Plan 04: 01_hent_data.py's get_teams() call left untouched - it enumerates all 30 teams for historical data fetch, not a name resolver, and was never one of D-03's four listed duplicates
 - [Phase ?]: [Phase 02] Plan 05: fixed the known df -> df_raw closure bug in beregn_lag_form during extraction into features.py; proven output-preserving via byte-identical cmp of nba_features.csv against a pre-edit baseline (987655 bytes, 3638 games, IDENTISK)
 - [Phase ?]: [Phase 02] Plan 05: batch-vs-live DIFF_ column divergence (7 stats in 02_feature_engineering.py's DIFF_STATS vs 9 stats in 04_value_detector.py's bygg_feature_rad) documented, not normalized -- harmless today because live path filters to feature_kolonner before predict; flagged as a Phase 5 finding
+- [Phase 02]: Phase 2 Plan 06: CORE-04's D-12 scoping (determinism/leakage-regression test, not live-vs-backtest integration test) is recorded inside tests/test_parity.py's own module docstring, including an explicit instruction for what Phase 5 must add
+- [Phase 02]: Phase 2 Plan 06: de-duplication audit greps needed path-prefix correction for this platform's BSD grep (macOS), which does not prefix recursive matches with './' -- corrected, semantically-equivalent commands were used and both are recorded in 02-06-SUMMARY.md
+- [Phase 02]: Phase 2 Plan 06: team-lookup grep surfaces 01_hent_data.py's unrelated get_teams() call and teams.py's own explanatory prose beyond the plan's literal '1 hit' expectation -- both are pre-existing, already-documented non-duplicate states (01_hent_data.py confirmed out of D-03 scope in 02-04-SUMMARY.md), not a new finding
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-21T11:10:33.611Z
-Stopped at: Completed 02-05-PLAN.md
+Last session: 2026-08-21T11:22:33.358Z
+Stopped at: Completed 02-06-PLAN.md
 Resume file: None
