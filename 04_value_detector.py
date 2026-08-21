@@ -24,6 +24,7 @@ import numpy as np
 from nba_api.stats.endpoints import leaguegamefinder, teamgamelogs
 from nba_api.stats.static import teams
 from modell_utils import KalibrertModell  # nødvendig for å laste pickle
+from config import MIN_VALUE_TERSKEL, MIN_ODDS, MAX_ODDS
 import time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -40,9 +41,6 @@ if not API_NØKKEL:
     print("  ODDS_API_NOKKEL=din-nøkkel-her")
     print("Hent en gratis nøkkel fra https://the-odds-api.com")
     sys.exit(1)  # NB: bare exit() gir exitkode 0 (=suksess) og gjemmer feilen for 06_bot.py
-MIN_VALUE_TERSKEL = 0.05            # Flagg bets der vi er 5%+ over bookmaker
-MIN_ODDS = 1.50                     # Ikke bett på favoritter med veldig lave odds
-MAX_ODDS = 4.00                     # Ikke bett på store outsidere (over 4x = for usikkert)
 # -------------------------------------------------------
 
 # -------------------------------------------------------
