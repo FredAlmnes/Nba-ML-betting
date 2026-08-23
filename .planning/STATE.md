@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Phase 4 context gathered
-last_updated: "2026-08-23T10:19:54.051Z"
+status: executing
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-08-23T11:22:57.583Z"
 last_activity: 2026-08-23
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 13
-  completed_plans: 13
+  total_plans: 22
+  completed_plans: 14
   percent: 60
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-19)
 
 **Core value:** The bot must demonstrate a positive, validated ROI over a proper historical backtest before it's trusted with anything beyond paper trading.
-**Current focus:** Phase 4 — historical odds acquisition & live refactor
+**Current focus:** Phase 04 — historical-odds-acquisition-live-refactor
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
-Status: Ready to plan
+Phase: 04 (historical-odds-acquisition-live-refactor) — EXECUTING
+Plan: 2 of 9
+Status: Ready to execute
 Last activity: 2026-08-23
 
-Progress: [██████████] 100%
+Progress: [██████░░░░] 64%
 
 ## Performance Metrics
 
@@ -66,6 +66,7 @@ Progress: [██████████] 100%
 | Phase 02 P06 | 25min | 2 tasks | 2 files |
 | Phase 03 P01 | 5min | 2 tasks | 2 files |
 | Phase 03 P02 | 8min | 3 tasks | 2 files |
+| Phase 04 P01 | 5min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,8 @@ Recent decisions affecting current work:
 - [Phase 03]: [Phase 03] Plan 01: extracted del_kronologisk_3veis as a pure module (kalibrering.py) — Bisects the existing 2-month holdout window into tren/kalibrer/test rather than widening it, so isotonic calibration can be tested without a data-leakage risk; Plan 02 wires this into 03_tren_modell.py
 - [Phase 03]: Phase 3 Plan 02: fit the isotonic calibrator exclusively on the kalibreringssett, evaluated exclusively on the testsett — closes the CALIB-01 same-slice leakage bug; XGBoost early stopping repointed from testsett to kalibreringssett (D-04) — The developer's uncommitted WIP fit and evaluated the calibrator on the same X_test/y_test slice, producing artificially good reliability numbers; disjoint fit/eval slices plus 3 new source-level guard tests (verified via negative control) close that risk before Phase 5's backtest
 - [Phase 03]: Phase 3 Plan 02: calibrated log-loss came out worse than uncalibrated on the current test slice (0.7356 vs 0.6170), with the kalibreringssett at 172 rows, well under sklearn's ~1000-sample isotonic guidance — Left visible in console output with the plan's own explanatory note rather than suppressed — a genuine finding for Phase 5's backtest to investigate (does this calibration help or hurt strategy ROI), not a bug in this plan's split/fit logic
+- [Phase 04]: [Phase 04] Plan 01: corrected REQUIREMENTS.md/ROADMAP.md/research/STACK.md to name the sport-wide historical odds endpoint per D-03's 2026-08-23 amendment — Preserves STACK.md's superseded original per-event claim via strikethrough rather than deleting it, matching the plan's instruction
+- [Phase 04]: [Phase 04] Plan 01: odds.py's er_allerede_arkivert() is the actual credit-saving mechanism, not INSERT OR IGNORE — er_allerede_arkivert() is called before any network call; INSERT OR IGNORE in arkiver_odds_rader() is only a duplicate-insert safety net
 
 ### Pending Todos
 
@@ -119,6 +122,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-23T10:19:54.042Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-historical-odds-acquisition-live-refactor/04-CONTEXT.md
+Last session: 2026-08-23T11:22:57.579Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
