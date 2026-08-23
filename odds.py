@@ -19,7 +19,8 @@ Dette plan-et (04-01) legger kun persistenslaget — ingen nettverkskode her enn
 """
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 
 ARKIV_FIL = "odds_arkiv.db"
@@ -28,6 +29,21 @@ SPORT = "basketball_nba"
 MARKED = "h2h"          # Moneyline er hele v1-scopet — ikke legg til spread/totals
 REGION = "eu"            # Matcher 04_value_detector.py sin nåværende live-region,
                           # slik at backtest og live ser de samme bookmakerne
+
+# NBA-kampdatoer folger hjemmearenaens lokale kalenderdag (US Eastern), ikke
+# UTC — en 19:30 ET-avspark er allerede neste UTC-dogn, men horer fortsatt
+# til samme kveld pa hjemmearenaens kalender. En rå UTC-dato-slice ville gitt
+# feil kampdato for enhver kamp som starter etter ca. kl. 19:00-20:00 UTC
+# (Pitfall 2, 04-RESEARCH.md).
+NBA_TIDSSONE = ZoneInfo("America/New_York")
+
+MORGEN_UTC_TIME = 13   # 13:00 UTC = 08:00 EST / 09:00 EDT — "morgenen av kampdag"
+                        # i arenaens tidssone, uansett sommertid. Dette ER
+                        # operasjonaliseringen av D-01 (den historiske arkiveringen
+                        # ma sporre om samme klokkeslett som live-boten faktisk kjorer
+                        # pa); endrer live-botens kjoreplan seg, ma dette tallet
+                        # oppdateres samtidig, ellers bryter hele backtest-premisset
+                        # (antagelse A3 i 04-RESEARCH.md).
 
 
 SKJEMA = """
@@ -146,3 +162,92 @@ def logg_kreditt(con, endepunkt, forespurt_dato, headers, antall_rader):
         ),
     )
     con.commit()
+
+
+def _parse_iso(tidspunkt):
+    """
+    Parser en ISO8601-streng med trailing 'Z' til en aware datetime.
+
+    `datetime.fromisoformat` godtar 'Z' direkte fra Python 3.11, men vi
+    normaliserer eksplisitt uansett — funksjonen skal ikke stille avhenge
+    av hvilken tolkeversjon den kjores under.
+    """
+    if isinstance(tidspunkt, datetime):
+        return tidspunkt
+    return datetime.fromisoformat(tidspunkt.replace("Z", "+00:00"))
+
+
+def kamp_dato_fra_commence(commence_time):
+    """
+    "2023-01-16T00:30:00Z" -> "2023-01-15".
+
+    Konverterer API-ets UTC commence_time til NBA-kampdagens kalenderdato i
+    US Eastern (se NBA_TIDSSONE-docstringen over) — ikke en rå UTC-dato-slice.
+    """
+    return _parse_iso(commence_time).astimezone(NBA_TIDSSONE).date().isoformat()
+
+
+def morgen_tidspunkt(kamp_dato):
+    """
+    "2023-01-15" -> "2023-01-15T13:00:00Z".
+
+    13:00 UTC er 08:00 EST / 09:00 EDT, altsa morgenen av kampdag i arenaens
+    tidssone og for enhver NBA-avspark. Se MORGEN_UTC_TIME-docstringen over
+    for hvorfor dette tallet ikke ma endres uten a sjekke live-botens
+    faktiske kjoreplan.
+    """
+    return f"{kamp_dato}T{MORGEN_UTC_TIME:02d}:00:00Z"
+
+
+def snap_til_5min(tidspunkt):
+    """
+    Runder NED til narmeste 5-minutters-rutenett, sekunder/mikrosekunder nullstilt.
+
+    Runder aldri opp — a runde opp kan skyve et "closing"-snapshot forbi
+    avspark, som er nettopp Pitfall 4 (04-RESEARCH.md).
+    """
+    dt = _parse_iso(tidspunkt)
+    avrundet_minutt = (dt.minute // 5) * 5
+    dt = dt.replace(minute=avrundet_minutt, second=0, microsecond=0)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def grupper_commence_tider(events, maks_gap_minutter=60):
+    """
+    Grupperer commence_time-tidspunkt i klynger av tett-i-tid avsparker.
+
+    NBA-slates spenner ofte over 3+ timer med avsparker pa én dato, sa ett
+    enkelt lukketidspunkt per dato kan ikke vare "rett for avspark" for alle
+    kampene (Pitfall 4). Godtar bade en liste med commence_time-strenger og
+    en liste med event-dicter (slik discovery-endepunktet returnerer dem).
+
+    Returnerer en liste av lister med de originale ISO-strengene.
+    """
+    if not events:
+        return []
+
+    tider = [
+        e["commence_time"] if isinstance(e, dict) else e
+        for e in events
+    ]
+    unike_sorterte = sorted(set(tider), key=lambda t: _parse_iso(t))
+
+    klynger = [[unike_sorterte[0]]]
+    for tid in unike_sorterte[1:]:
+        klynge_start = _parse_iso(klynger[-1][0])
+        gap_minutter = (_parse_iso(tid) - klynge_start).total_seconds() / 60
+        if gap_minutter > maks_gap_minutter:
+            klynger.append([tid])
+        else:
+            klynger[-1].append(tid)
+    return klynger
+
+
+def lukketidspunkt(klynge, minutter_for=15):
+    """
+    Lukketidspunkt for en klynge avsparker: `minutter_for` minutter for den
+    tidligste avsparken i klyngen, avrundet ned til 5-minutters-rutenettet.
+    """
+    tidligste = min(klynge, key=lambda t: _parse_iso(t))
+    forskjøvet = _parse_iso(tidligste) - timedelta(minutes=minutter_for)
+    return snap_til_5min(forskjøvet)
