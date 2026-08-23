@@ -1,14 +1,21 @@
 """
-Tester for odds.py sitt SQLite-arkivlag (plan 04-01).
+Tester for odds.py sitt SQLite-arkivlag (plan 04-01) og HTTP-laget (plan 04-04).
 
 Dekker skjema-oppretting, eksistenssjekk før nettverkskall (D-04's faktiske
 kredittsparende mekanisme), idempotent innsetting, og kredittlogg-lagring.
-Ingen nettverkskall her — dette plan-et bygger kun persistenslaget.
+
+Fra og med plan 04-04 dekkes ogsa hent_api_nokkel/_utfor_kall/hent_live_odds/
+hent_historisk_odds_snapshot/hent_historiske_events — ALLTID mot en mocket
+requests.get (unittest.mock.patch("odds.requests.get")). Ingen test i denne
+filen gjor et ekte nettverkskall til the-odds-api.com — det er forbeholdt
+plan 04-07 sin eksplisitt godkjente smoke-test.
 """
 
 import sqlite3
+from unittest.mock import patch
 
 import pytest
+import requests
 
 import odds
 
@@ -312,3 +319,134 @@ def test_parsede_rader_settes_inn_via_arkiver_odds_rader(con):
     antall_innsatt = odds.arkiver_odds_rader(con, rader)
     assert antall_innsatt == 2
     assert con.execute("SELECT COUNT(*) FROM odds_arkiv").fetchone()[0] == 2
+
+
+# ---------------------------------------------------------------------------
+# Plan 04-04: HTTP-laget (hent_api_nokkel, _utfor_kall, hent_live_odds)
+#
+# SvarMock star inn for requests.Response uten a bygge en ekte HTTP-forbindelse.
+# raise_for_status() etterligner requests sin virkemate: kaster HTTPError for
+# enhver status >= 400, som er nettopp hva _utfor_kall sin tenacity-retry
+# lytter etter (retry_if_exception_type(requests.exceptions.HTTPError)).
+# ---------------------------------------------------------------------------
+
+
+class SvarMock:
+    def __init__(self, status_code=200, json_data=None, text="", headers=None):
+        self.status_code = status_code
+        self._json_data = json_data if json_data is not None else []
+        self.text = text
+        self.headers = headers or {}
+
+    def json(self):
+        return self._json_data
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(f"{self.status_code} feil", response=self)
+
+
+def test_hent_api_nokkel_returnerer_verdi(monkeypatch):
+    monkeypatch.setattr(odds, "load_dotenv", lambda: None)
+    monkeypatch.setenv("ODDS_API_NOKKEL", "hemmelig-test-nokkel")
+    assert odds.hent_api_nokkel() == "hemmelig-test-nokkel"
+
+
+def test_hent_api_nokkel_exitcode_1_uten_variabel(monkeypatch, capsys):
+    monkeypatch.setattr(odds, "load_dotenv", lambda: None)
+    monkeypatch.delenv("ODDS_API_NOKKEL", raising=False)
+    with pytest.raises(SystemExit) as exc_info:
+        odds.hent_api_nokkel()
+    assert exc_info.value.code == 1
+    utdata = capsys.readouterr().out
+    assert "ODDS_API_NOKKEL" in utdata
+
+
+@patch("odds.requests.get")
+def test_hent_live_odds_returnerer_json_uendret(mock_get):
+    kamper = [{"id": "evt-1", "home_team": "Boston Celtics"}]
+    mock_get.return_value = SvarMock(
+        status_code=200, json_data=kamper, headers={"x-requests-remaining": "19990"}
+    )
+    resultat = odds.hent_live_odds(api_nokkel="test-nokkel")
+    assert resultat == kamper
+
+
+@patch("odds.requests.get")
+def test_hent_live_odds_kaller_riktig_url_og_params(mock_get):
+    mock_get.return_value = SvarMock(status_code=200, json_data=[])
+    odds.hent_live_odds(api_nokkel="test-nokkel")
+
+    kall_args, kall_kwargs = mock_get.call_args
+    assert kall_args[0] == "https://api.the-odds-api.com/v4/sports/basketball_nba/odds/"
+    params = kall_kwargs["params"]
+    assert params["apiKey"] == "test-nokkel"
+    assert params["regions"] == "eu"
+    assert params["markets"] == "h2h"
+    assert params["oddsFormat"] == "decimal"
+    assert params["dateFormat"] == "iso"
+
+
+@patch("odds.requests.get")
+def test_hent_live_odds_401_gir_systemexit_og_printer_body(mock_get, capsys):
+    mock_get.return_value = SvarMock(status_code=401, text="Ugyldig API-nokkel")
+    with pytest.raises(SystemExit) as exc_info:
+        odds.hent_live_odds(api_nokkel="ugyldig-nokkel")
+    assert exc_info.value.code == 1
+    utdata = capsys.readouterr().out
+    assert "Ugyldig API-nokkel" in utdata
+
+
+@patch("time.sleep", lambda *a, **k: None)
+@patch("odds.requests.get")
+def test_utfor_kall_retryer_pa_429_og_lykkes(mock_get):
+    mock_get.side_effect = [
+        SvarMock(status_code=429, text="Rate limited"),
+        SvarMock(status_code=200, json_data=[{"id": "evt-1"}]),
+    ]
+    respons = odds._utfor_kall(
+        "https://api.the-odds-api.com/v4/sports/basketball_nba/odds/", {"apiKey": "x"}
+    )
+    assert respons.status_code == 200
+    assert mock_get.call_count == 2
+
+
+@patch("time.sleep", lambda *a, **k: None)
+@patch("odds.requests.get")
+def test_utfor_kall_gir_opp_etter_4_forsok_pa_503(mock_get):
+    mock_get.side_effect = [SvarMock(status_code=503, text="Server error")] * 4
+    with pytest.raises(requests.exceptions.HTTPError):
+        odds._utfor_kall(
+            "https://api.the-odds-api.com/v4/sports/basketball_nba/odds/", {"apiKey": "x"}
+        )
+    assert mock_get.call_count == 4
+
+
+@patch("odds.requests.get")
+def test_utfor_kall_retryer_ikke_401(mock_get):
+    mock_get.return_value = SvarMock(status_code=401, text="Ugyldig nokkel")
+    with pytest.raises(SystemExit):
+        odds._utfor_kall(
+            "https://api.the-odds-api.com/v4/sports/basketball_nba/odds/", {"apiKey": "x"}
+        )
+    assert mock_get.call_count == 1
+
+
+@patch("odds.requests.get")
+def test_utfor_kall_retryer_ikke_422(mock_get):
+    mock_get.return_value = SvarMock(status_code=422, text="Ugyldige parametre")
+    with pytest.raises(SystemExit):
+        odds._utfor_kall(
+            "https://api.the-odds-api.com/v4/sports/basketball_nba/odds/", {"apiKey": "x"}
+        )
+    assert mock_get.call_count == 1
+
+
+@patch("odds.requests.get")
+def test_api_nokkel_aldri_i_printet_output(mock_get, capsys):
+    mock_get.return_value = SvarMock(status_code=401, text="Feil")
+    hemmelig = "super-hemmelig-nokkel-123"
+    with pytest.raises(SystemExit):
+        odds.hent_live_odds(api_nokkel=hemmelig)
+    utdata = capsys.readouterr().out
+    assert hemmelig not in utdata
