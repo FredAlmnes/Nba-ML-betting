@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-08-23T09:44:33.026Z"
+status: verifying
+stopped_at: Phase 3 complete — Plans 01 and 02 both executed
+last_updated: "2026-08-23T09:51:20.126Z"
 last_activity: 2026-08-23
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 13
-  completed_plans: 12
-  percent: 40
+  completed_plans: 13
+  percent: 60
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 
 Phase: 03 (calibration-remediation) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-23
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [█████████░] 92%
 | Phase 02 P05 | 8min | 3 tasks | 4 files |
 | Phase 02 P06 | 25min | 2 tasks | 2 files |
 | Phase 03 P01 | 5min | 2 tasks | 2 files |
+| Phase 03 P02 | 8min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,8 @@ Recent decisions affecting current work:
 - [Phase 02]: Phase 2 Plan 06: de-duplication audit greps needed path-prefix correction for this platform's BSD grep (macOS), which does not prefix recursive matches with './' -- corrected, semantically-equivalent commands were used and both are recorded in 02-06-SUMMARY.md
 - [Phase 02]: Phase 2 Plan 06: team-lookup grep surfaces 01_hent_data.py's unrelated get_teams() call and teams.py's own explanatory prose beyond the plan's literal '1 hit' expectation -- both are pre-existing, already-documented non-duplicate states (01_hent_data.py confirmed out of D-03 scope in 02-04-SUMMARY.md), not a new finding
 - [Phase 03]: [Phase 03] Plan 01: extracted del_kronologisk_3veis as a pure module (kalibrering.py) — Bisects the existing 2-month holdout window into tren/kalibrer/test rather than widening it, so isotonic calibration can be tested without a data-leakage risk; Plan 02 wires this into 03_tren_modell.py
+- [Phase 03]: Phase 3 Plan 02: fit the isotonic calibrator exclusively on the kalibreringssett, evaluated exclusively on the testsett — closes the CALIB-01 same-slice leakage bug; XGBoost early stopping repointed from testsett to kalibreringssett (D-04) — The developer's uncommitted WIP fit and evaluated the calibrator on the same X_test/y_test slice, producing artificially good reliability numbers; disjoint fit/eval slices plus 3 new source-level guard tests (verified via negative control) close that risk before Phase 5's backtest
+- [Phase 03]: Phase 3 Plan 02: calibrated log-loss came out worse than uncalibrated on the current test slice (0.7356 vs 0.6170), with the kalibreringssett at 172 rows, well under sklearn's ~1000-sample isotonic guidance — Left visible in console output with the plan's own explanatory note rather than suppressed — a genuine finding for Phase 5's backtest to investigate (does this calibration help or hurt strategy ROI), not a bug in this plan's split/fit logic
 
 ### Pending Todos
 
@@ -115,6 +118,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-23T09:43:45.101Z
-Stopped at: Phase 3 context gathered
+Last session: 2026-08-23T09:51:20.121Z
+Stopped at: Phase 3 complete — Plans 01 and 02 both executed
 Resume file: None

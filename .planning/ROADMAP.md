@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Repo Hygiene & Config Remediation** - Fresh clone works, no leaked secrets, docs match running config (completed 2026-08-20)
 - [x] **Phase 2: Shared Core Extraction & Test Foundation** - Feature/team/strategy logic lives in one place with tests, no more silent drift (completed 2026-08-21)
-- [ ] **Phase 3: Calibration Remediation** - Isotonic calibrator fit/evaluated on properly separated data, closing a confirmed leak
+- [x] **Phase 3: Calibration Remediation** - Isotonic calibrator fit/evaluated on properly separated data, closing a confirmed leak (completed 2026-08-23)
 - [ ] **Phase 4: Historical Odds Acquisition & Live Refactor** - Historical odds permanently archived; live bot runs on the shared core
 - [ ] **Phase 5: Walk-Forward Backtest Engine** - Full strategy replayed chronologically against history with holdout-gated, versioned ROI/drawdown/CLV results
 
@@ -150,6 +150,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
-| 3. Calibration Remediation | 1/2 | In Progress|  |
+| 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |

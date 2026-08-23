@@ -22,8 +22,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Calibration Remediation (fixes a confirmed live bug)
 
-- [ ] **CALIB-01**: The isotonic calibrator is fit and evaluated using a proper train/calibrate/test three-way split, not the same data slice for both fitting and evaluation
-- [ ] **CALIB-02**: An out-of-sample calibration curve / reliability diagram is reported on held-out data the calibrator never saw
+- [x] **CALIB-01**: The isotonic calibrator is fit and evaluated using a proper train/calibrate/test three-way split, not the same data slice for both fitting and evaluation
+- [x] **CALIB-02**: An out-of-sample calibration curve / reliability diagram is reported on held-out data the calibrator never saw
 
 ### Historical Odds & Live Refactor
 
@@ -79,8 +79,8 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 | CORE-02 | Phase 2 | Complete |
 | CORE-03 | Phase 2 | Complete |
 | CORE-04 | Phase 2 | Complete |
-| CALIB-01 | Phase 3 | Pending |
-| CALIB-02 | Phase 3 | Pending |
+| CALIB-01 | Phase 3 | Complete |
+| CALIB-02 | Phase 3 | Complete |
 | ODDS-01 | Phase 4 | Pending |
 | ODDS-02 | Phase 4 | Pending |
 | BT-01 | Phase 5 | Pending |
