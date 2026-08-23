@@ -6,6 +6,9 @@ overlapper, blir isotonic-kalibratoren fittet på data den senere
 evalueres på, som er nøyaktig lekkasjebugen fase 3 fikser.
 """
 
+import re
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -50,3 +53,60 @@ def test_kronologisk_rekkefolge(kamp_datoer_df):
 def test_ugyldig_kalibrer_cutoff_gir_verdifeil(kamp_datoer_df):
     with pytest.raises(ValueError):
         del_kronologisk_3veis(kamp_datoer_df, kalibrer_cutoff_mnd=2, tren_cutoff_mnd=2)
+
+
+# ---------------------------------------------------------------------------
+# Kildekode-vokterester for 03_tren_modell.py (Plan 03-02)
+#
+# 03_tren_modell.py kan ikke importeres av en test (modulnavn starter med
+# et siffer, og den kjører en full XGBoost-treningsrunde ved import). Disse
+# testene leser derfor skriptet som tekst og sjekker at CALIB-01-lekkasje-
+# bugen (kalibratoren fittet på testsettet den senere evalueres på) ikke
+# kan smyge seg tilbake inn i koden ubemerket.
+# ---------------------------------------------------------------------------
+
+def _treningsskript_kode():
+    """
+    Leser 03_tren_modell.py som tekst og fjerner kommentarlinjer.
+
+    Filtreringen er obligatorisk: skriptet inneholder med vilje norske
+    kommentarer som nevner X_test/eval_set (forklarer HVORFOR testsettet
+    IKKE skal brukes til fitting), så et ufiltrert søk ville vært
+    selvmotsigende og gi falske positiver.
+    """
+    sti = Path(__file__).resolve().parents[1] / "03_tren_modell.py"
+    tekst = sti.read_text(encoding="utf-8")
+    linjer = [
+        linje for linje in tekst.splitlines()
+        if not linje.strip().startswith("#")
+    ]
+    return "\n".join(linjer)
+
+
+def test_early_stopping_bruker_aldri_testsettet():
+    """D-04 — testsettet skal aldri styre hvor mange trær som bygges."""
+    kode = _treningsskript_kode()
+    assert re.search(
+        r"eval_set\s*=\s*\[\(\s*X_kalibrer\s*,\s*y_kalibrer\s*\)\]", kode
+    )
+    assert re.search(r"eval_set\s*=\s*\[\(\s*X_test", kode) is None
+    # Skriptet skal aldri drifte tilbake til en inline 2-veis splitt som
+    # forbikjører den testede del_kronologisk_3veis-funksjonen.
+    assert "from kalibrering import del_kronologisk_3veis" in kode
+
+
+def test_kalibrator_fittes_kun_pa_kalibreringssettet():
+    """CALIB-01 — dette er selve lekkasjebugen fase 3 lukker."""
+    kode = _treningsskript_kode()
+    assert re.search(
+        r"kalibrerer\.fit\(\s*y_rå_kalibrer\s*,\s*y_kalibrer\s*\)", kode
+    )
+    assert re.search(r"kalibrerer\.fit\([^)]*y_test", kode) is None
+
+
+def test_isotonic_klipper_utenfor_omraade():
+    """Pitfall 3 — sklearn-standarden "nan" ville stille korrumpert reliabilitetstabellen."""
+    kode = _treningsskript_kode()
+    assert re.search(
+        r'IsotonicRegression\(\s*out_of_bounds\s*=\s*"clip"\s*\)', kode
+    )
