@@ -22,6 +22,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from teams import finn_lag_id
+
 
 ARKIV_FIL = "odds_arkiv.db"
 
@@ -251,3 +253,69 @@ def lukketidspunkt(klynge, minutter_for=15):
     tidligste = min(klynge, key=lambda t: _parse_iso(t))
     forskjøvet = _parse_iso(tidligste) - timedelta(minutes=minutter_for)
     return snap_til_5min(forskjøvet)
+
+
+def parse_snapshot_til_rader(snapshot, kamp_dato, snapshot_type, hentet_tidspunkt=None):
+    """
+    Konverterer en sport-wide historisk odds-respons til en liste av
+    arkivrader (samme 15-felts rekkefolge som SKJEMA/arkiver_odds_rader).
+
+    `snapshot` er hele den dekodede JSON-kroppen (med `timestamp`/
+    `previous_timestamp`/`next_timestamp`/`data`). `kamp_dato` er NBA-
+    kampdatoen dette kallet ble gjort for. `snapshot_type` er "bet_time"
+    eller "closing".
+
+    Kamper hvis commence_time hoerer til en annen NBA-kampdato enn
+    `kamp_dato` droppes helt — de blir ALDRI ombenevnt til forespurt dato
+    (ARCHITECTURE.md Pitfall #6: et snapshot tatt for dato D er kun
+    aerlig bevis om dato D sine kamper).
+
+    Lag som teams.finn_lag_id() ikke kan lose beholder likevel raden sin,
+    med None i *_lag_id-kolonnen og det rå navnet bevart — å droppe kampen
+    stille ville skapt et usynlig hull i arkivet (T-04-14).
+    """
+    snapshot_timestamp = snapshot.get("timestamp")
+    if not snapshot_timestamp:
+        raise ValueError(
+            "Snapshot mangler egen 'timestamp' — kan ikke arkiveres aerlig "
+            "uten å vite hvilket tidspunkt oddsene faktisk gjelder for"
+        )
+
+    if hentet_tidspunkt is None:
+        hentet_tidspunkt = datetime.now().isoformat(timespec="seconds")
+
+    rader = []
+    for kamp in snapshot.get("data", []):
+        spill_dato = kamp_dato_fra_commence(kamp["commence_time"])
+        if spill_dato != kamp_dato:
+            continue
+
+        hjemme_navn = kamp["home_team"]
+        borte_navn = kamp["away_team"]
+        hjemme_lag_id = finn_lag_id(hjemme_navn)
+        borte_lag_id = finn_lag_id(borte_navn)
+
+        for bookmaker in kamp.get("bookmakers", []):
+            for market in bookmaker.get("markets", []):
+                if market.get("key") != MARKED:
+                    continue
+                for outcome in market.get("outcomes", []):
+                    rader.append((
+                        SPORT,
+                        kamp["id"],
+                        kamp_dato,
+                        hjemme_navn,
+                        borte_navn,
+                        hjemme_lag_id,
+                        borte_lag_id,
+                        kamp["commence_time"],
+                        snapshot_type,
+                        snapshot_timestamp,
+                        bookmaker.get("title", bookmaker.get("key")),
+                        MARKED,
+                        outcome["name"],
+                        float(outcome["price"]),
+                        hentet_tidspunkt,
+                    ))
+
+    return rader
