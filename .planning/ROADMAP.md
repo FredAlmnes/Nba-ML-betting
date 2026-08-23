@@ -139,7 +139,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 04-04-PLAN.md — odds.py HTTP-klient: live + begge historiske endepunkter, kredittregnskap, retry (tenacity bak blokkerende legitimitetssjekk)
+- [x] 04-04-PLAN.md — odds.py HTTP-klient: live + begge historiske endepunkter, kredittregnskap, retry (tenacity bak blokkerende legitimitetssjekk)
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -180,5 +180,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
-| 4. Historical Odds Acquisition & Live Refactor | 3/9 | In Progress|  |
+| 4. Historical Odds Acquisition & Live Refactor | 4/9 | In Progress|  |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |
