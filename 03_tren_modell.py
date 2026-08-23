@@ -16,7 +16,9 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 from sklearn.metrics import accuracy_score, log_loss, brier_score_loss
-from sklearn.calibration import CalibratedClassifierCV
+from sklearn.isotonic import IsotonicRegression
+from modell_utils import KalibrertModell
+from kalibrering import del_kronologisk_3veis
 import pickle
 
 # -------------------------------------------------------
@@ -54,21 +56,42 @@ y = df[maal_kolonne]
 # - Test på nyere kamper
 # Dette simulerer virkeligheten: vi kan aldri spå fortiden.
 
-# Bruk de siste 2 månedene som testsett, resten til trening.
-# Dette er bedre enn 80/20 fordi vi alltid tester på de nyeste kampene,
-# uavhengig av hvor mye data vi har totalt.
-fra_dato = df["GAME_DATE_HJEMME"].max() - pd.DateOffset(months=2)
-tren_mask = df["GAME_DATE_HJEMME"] < fra_dato
+# Bruk de siste 2 månedene som holdout, resten til trening. Dette er bedre
+# enn 80/20 fordi vi alltid tester på de nyeste kampene, uavhengig av hvor
+# mye data vi har totalt.
+#
+# Holdout-vinduet deles nå i TRE ikke-overlappende bolker i stedet for to:
+# tren (alt før holdout), kalibrer (den eldste halvdelen av holdout-vinduet)
+# og test (den nyeste halvdelen). Kalibrer brukes til early stopping og til
+# å fitte isotonic-kalibratoren; test er den nyeste halvdelen og berøres
+# ALDRI av noen .fit()-kall — den brukes kun til sluttrapportering. Uten
+# dette skillet ville kalibratoren blitt evaluert på nøyaktig de samme
+# dataene den ble fittet på — kunstig gode tall som ikke sier noe om ekte
+# generalisering (CALIB-01).
+tren_mask, kalibrer_mask, test_mask = del_kronologisk_3veis(df)
 
-X_tren = X[tren_mask]
-y_tren = y[tren_mask]
-X_test = X[~tren_mask]
-y_test = y[~tren_mask]
+X_tren, y_tren = X[tren_mask], y[tren_mask]
+X_kalibrer, y_kalibrer = X[kalibrer_mask], y[kalibrer_mask]
+X_test, y_test = X[test_mask], y[test_mask]
 
-print(f"\nTreningssett: {len(X_tren)} kamper")
-print(f"Testsett:     {len(X_test)} kamper")
-print(f"Siste treningskamp: {df['GAME_DATE_HJEMME'][tren_mask].iloc[-1].date()}")
-print(f"Første testkamp:    {df['GAME_DATE_HJEMME'][~tren_mask].iloc[0].date()}")
+print(f"\nTreningssett:     {len(X_tren)} kamper  "
+      f"({df['GAME_DATE_HJEMME'][tren_mask].iloc[0].date()} -> "
+      f"{df['GAME_DATE_HJEMME'][tren_mask].iloc[-1].date()})")
+print(f"Kalibreringssett: {len(X_kalibrer)} kamper  "
+      f"({df['GAME_DATE_HJEMME'][kalibrer_mask].iloc[0].date()} -> "
+      f"{df['GAME_DATE_HJEMME'][kalibrer_mask].iloc[-1].date()})")
+print(f"Testsett:         {len(X_test)} kamper  "
+      f"({df['GAME_DATE_HJEMME'][test_mask].iloc[0].date()} -> "
+      f"{df['GAME_DATE_HJEMME'][test_mask].iloc[-1].date()})")
+
+# Scikit-learn anbefaler >~1000 eksempler for isotonic regression (D-03).
+# Dette er en kjørende sjekk mot det faktiske datagrunnlaget, ikke et fast
+# tall — kalibreringen kan være støyende/overfittet på et lite datasett.
+if len(X_kalibrer) < 1000:
+    print(f"\nADVARSEL: Kalibreringssettet har kun {len(X_kalibrer)} kamper "
+          f"(under sklearns anbefalte ~1000 for isotonic regression). "
+          f"Kalibreringen kan derfor være støyende/overfittet på et lite "
+          f"datasett.")
 
 # -------------------------------------------------------
 # 4. Tren XGBoost-modellen
@@ -89,7 +112,12 @@ modell = xgb.XGBClassifier(
 
 modell.fit(
     X_tren, y_tren,
-    eval_set=[(X_test, y_test)],
+    # Early stopping ser nå på kalibreringssettet, ikke testsettet, slik at
+    # testsettet forblir helt urørt av fitting (D-04). Ulempen: kalibrerings-
+    # settet gjør dobbelt arbeid (early stopping + isotonic-fit) — en bevisst,
+    # mindre avveining framfor å innføre en fjerde split (hører til fase 5 /
+    # BT-03).
+    eval_set=[(X_kalibrer, y_kalibrer)],
     verbose=50  # Skriv ut fremgang hvert 50. tre
 )
 
@@ -128,13 +156,47 @@ importance = pd.DataFrame({
 print(importance.head(10).to_string(index=False))
 
 # -------------------------------------------------------
-# 7. Lagre modellen
+# 7. Kalibrer modellen med isotonic regression
 # -------------------------------------------------------
+# XGBoost-sannsynligheter er ofte feilkalibrert – modellen kan
+# si "70% sjanse" når den faktisk har rett 60% av gangene.
+# Isotonic regression fitter en monoton funksjon fra rå XGBoost-
+# score til faktisk observert treffsannsynlighet.
+
+print("\nKalibrerer modellen (isotonic regression)...")
+
+y_rå        = modell.predict_proba(X_test)[:, 1]
+kalibrerer  = IsotonicRegression(out_of_bounds="clip")
+kalibrerer.fit(y_rå, y_test)
+
+y_sann_kal  = kalibrerer.predict(y_rå)
+logloss_kal = log_loss(y_test, y_sann_kal)
+brier_kal   = brier_score_loss(y_test, y_sann_kal)
+
+print(f"\n--- Kalibrering: før vs etter ---")
+print(f"{'':25} {'Ukalibrert':>12} {'Kalibrert':>12}")
+print(f"{'Log-loss':25} {logloss:>12.4f} {logloss_kal:>12.4f}")
+print(f"{'Brier Score':25} {brier:>12.4f} {brier_kal:>12.4f}")
+print(f"(Lavere er bedre for begge)")
+
+# Diagnose: sammenlign forutsagt sannsynlighet med faktisk treffsrate per bøtte
+print(f"\n--- Kalibreringsdiagnose (10 bøtter) ---")
+print(f"{'Pred. sann. (kal.)':>20} {'Faktisk treffsrate':>20} {'Antall kamper':>15}")
+diag = pd.DataFrame({"pred": y_sann_kal, "faktisk": y_test.values})
+for _, gruppe in diag.groupby(pd.cut(diag["pred"], bins=10), observed=True):
+    if len(gruppe) > 0:
+        print(f"{gruppe['pred'].mean():>20.1%} {gruppe['faktisk'].mean():>20.1%} {len(gruppe):>15}")
+
+# -------------------------------------------------------
+# 8. Lagre kalibrert modell
+# -------------------------------------------------------
+kalibrert_modell = KalibrertModell(modell, kalibrerer)
+
 with open("nba_modell.pkl", "wb") as f:
     pickle.dump({
-        "modell": modell,
+        "modell":           kalibrert_modell,
         "feature_kolonner": feature_kolonner
     }, f)
 
-print("\nModell lagret til 'nba_modell.pkl'")
+print("\nKalibrert modell lagret til 'nba_modell.pkl'")
 print("Kjør nå 04_value_detector.py for å sammenligne med bookmaker-odds!")
