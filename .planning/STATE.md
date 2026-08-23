@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
+status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-08-21T11:42:23.055Z"
-last_activity: 2026-08-21
+last_updated: "2026-08-23T09:44:33.026Z"
+last_activity: 2026-08-23
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 13
+  completed_plans: 12
   percent: 40
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-19)
 
 **Core value:** The bot must demonstrate a positive, validated ROI over a proper historical backtest before it's trusted with anything beyond paper trading.
-**Current focus:** Phase 3 — calibration remediation
+**Current focus:** Phase 03 — calibration-remediation
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-21
+Phase: 03 (calibration-remediation) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-08-23
 
-Progress: [██████████] 100%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [██████████] 100%
 | Phase 02 P04 | 5min | 3 tasks | 6 files |
 | Phase 02 P05 | 8min | 3 tasks | 4 files |
 | Phase 02 P06 | 25min | 2 tasks | 2 files |
+| Phase 03 P01 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,7 @@ Recent decisions affecting current work:
 - [Phase 02]: Phase 2 Plan 06: CORE-04's D-12 scoping (determinism/leakage-regression test, not live-vs-backtest integration test) is recorded inside tests/test_parity.py's own module docstring, including an explicit instruction for what Phase 5 must add
 - [Phase 02]: Phase 2 Plan 06: de-duplication audit greps needed path-prefix correction for this platform's BSD grep (macOS), which does not prefix recursive matches with './' -- corrected, semantically-equivalent commands were used and both are recorded in 02-06-SUMMARY.md
 - [Phase 02]: Phase 2 Plan 06: team-lookup grep surfaces 01_hent_data.py's unrelated get_teams() call and teams.py's own explanatory prose beyond the plan's literal '1 hit' expectation -- both are pre-existing, already-documented non-duplicate states (01_hent_data.py confirmed out of D-03 scope in 02-04-SUMMARY.md), not a new finding
+- [Phase 03]: [Phase 03] Plan 01: extracted del_kronologisk_3veis as a pure module (kalibrering.py) — Bisects the existing 2-month holdout window into tren/kalibrer/test rather than widening it, so isotonic calibration can be tested without a data-leakage risk; Plan 02 wires this into 03_tren_modell.py
 
 ### Pending Todos
 
@@ -113,6 +115,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-21T11:42:23.042Z
+Last session: 2026-08-23T09:43:45.101Z
 Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-calibration-remediation/03-CONTEXT.md
+Resume file: None

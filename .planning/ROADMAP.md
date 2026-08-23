@@ -150,6 +150,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
-| 3. Calibration Remediation | 0/TBD | Not started | - |
+| 3. Calibration Remediation | 1/2 | In Progress|  |
 | 4. Historical Odds Acquisition & Live Refactor | 0/TBD | Not started | - |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |
