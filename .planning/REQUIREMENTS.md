@@ -27,7 +27,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Historical Odds & Live Refactor
 
-- [ ] **ODDS-01**: Historical odds are fetched via The Odds API's sport-wide historical endpoint (`/v4/historical/sports/{sport}/odds`), one call per unique game date, and archived permanently in SQLite, so re-running/iterating on the backtest costs no further API credits (endpoint amended 2026-08-23 per Phase 4 D-03 — both endpoints cost 10 x markets x regions, but per-event charges per game queried; sport-wide charges once per snapshot). Persistence layer (`odds.py`'s SQLite archive) done in 04-01; the actual fetch/backfill lands in 04-03 through 04-09.
+- [ ] **ODDS-01**: Historical odds are fetched via The Odds API's sport-wide historical endpoint (`/v4/historical/sports/{sport}/odds`), one call per unique game date, and archived permanently in SQLite, so re-running/iterating on the backtest costs no further API credits (endpoint amended 2026-08-23 per Phase 4 D-03 — both endpoints cost 10 x markets x regions, but per-event charges per game queried; sport-wide charges once per snapshot). Persistence layer (`odds.py`'s SQLite archive) done in 04-01; timestamp/date logic and the offline snapshot-to-row parser (`parse_snapshot_til_rader`) done in 04-03; the actual HTTP fetch/backfill still lands in 04-04 through 04-09.
 - [ ] **ODDS-02**: `06_bot.py` imports the shared core directly instead of invoking `04_value_detector.py`/`05_skadefilter.py` as subprocesses. Injury-filter half (`skadefilter.py`, importable with zero import-time network calls) done in 04-02; `04_value_detector.py`'s equivalent extraction lands in 04-06, and `06_bot.py`'s actual in-process wiring lands in 04-08.
 
 ### Backtest Engine (the core deliverable)
@@ -81,7 +81,7 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 | CORE-04 | Phase 2 | Complete |
 | CALIB-01 | Phase 3 | Complete |
 | CALIB-02 | Phase 3 | Complete |
-| ODDS-01 | Phase 4 | In Progress (1/9 plans — persistence layer only) |
+| ODDS-01 | Phase 4 | In Progress (2/9 plans — persistence layer + offline timestamp/snapshot-parsing logic, no HTTP fetch yet) |
 | ODDS-02 | Phase 4 | In Progress (2/9 plans — injury-filter extraction only) |
 | BT-01 | Phase 5 | Pending |
 | BT-02 | Phase 5 | Pending |
