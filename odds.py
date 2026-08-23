@@ -282,6 +282,69 @@ def hent_live_odds(api_nokkel=None, regions=REGION, markets=MARKED, sport=SPORT)
     return kamper
 
 
+# Kredittmodell for de to historiske endepunktene under (04-RESEARCH.md sin
+# CRITICAL FINDING, D-03-amendmentet): sport-wide odds-snapshotet koster
+# 10 x markets x regions PER KALL uansett hvor mange kamper som kommer
+# tilbake, sa ett kall per kampdato dekker en hel slate - derfor brukes
+# ALDRI per-kamp-oddsendepunktet (10 kreditter PER KAMP, ville kostet
+# ~72 760 kreditter for dette prosjektets 3 638 kamper, 3.6x budsjettet).
+# Discovery-endepunktet (hent_historiske_events) koster kun 1 kreditt per
+# kall (0 hvis tomt) og gir ingen odds, bare hvilke kamper som fantes og
+# nar de startet - den billige forhandsvisningen som gjor at lukketidspunkt
+# kan tidfestes presist (grupper_commence_tider) i stedet for a gjettes
+# (Pitfall 4 / Open Question 2).
+
+
+def hent_historisk_odds_snapshot(api_nokkel, dato_iso, regions=REGION, markets=MARKED, sport=SPORT):
+    """
+    Sport-wide historisk odds-snapshot for ett tidspunkt. Kost: 10 x markets
+    x regions PER KALL, uavhengig av antall kamper i svaret (se kommentaren
+    over - D-03-amendmentet og 04-RESEARCH.md sin CRITICAL FINDING).
+
+    Returnerer (snapshot, headers) - snapshot er hele den dekodede JSON-
+    kroppen (med egen 'timestamp'/'previous_timestamp'/'next_timestamp'/
+    'data'), headers er responsens header-mapping. Skriver ikke til arkivet
+    selv - kredittregnskap og arkivering eies av kalleren.
+
+    En manglende 'timestamp' i body gis videre uendret her - det er
+    parse_snapshot_til_rader (04-03) sitt ansvar a kaste ValueError, ikke
+    hentelagets.
+    """
+    url = f"{BASIS_URL}/historical/sports/{sport}/odds"
+    params = {
+        "apiKey": api_nokkel,
+        "regions": regions,
+        "markets": markets,
+        "oddsFormat": "decimal",
+        "dateFormat": "iso",
+        "date": dato_iso,
+    }
+    respons = _utfor_kall(url, params)
+    return respons.json(), respons.headers
+
+
+def hent_historiske_events(api_nokkel, dato_iso, commence_fra, commence_til, sport=SPORT):
+    """
+    Historisk event-discovery: hvilke kamper fantes pa et tidspunkt og nar de
+    starter, uten odds. Kost: 1 kreditt per kall, 0 hvis svaret er tomt.
+
+    Returnerer (svar, headers). Svaret er en liste av
+    {id, home_team, away_team, commence_time} per kamp - ingen regions/
+    markets-parametre, discovery-endepunktet tar ikke imot dem. commence_time
+    -verdiene mates inn i grupper_commence_tider (04-03) for a tidfeste
+    closing-snapshots presist i stedet for a gjette (Pitfall 4).
+    """
+    url = f"{BASIS_URL}/historical/sports/{sport}/events"
+    params = {
+        "apiKey": api_nokkel,
+        "date": dato_iso,
+        "commenceTimeFrom": commence_fra,
+        "commenceTimeTo": commence_til,
+    }
+    respons = _utfor_kall(url, params)
+    return respons.json(), respons.headers
+
+
 def _parse_iso(tidspunkt):
     """
     Parser en ISO8601-streng med trailing 'Z' til en aware datetime.
