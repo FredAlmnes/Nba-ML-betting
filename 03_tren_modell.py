@@ -165,24 +165,54 @@ print(importance.head(10).to_string(index=False))
 
 print("\nKalibrerer modellen (isotonic regression)...")
 
-y_rå        = modell.predict_proba(X_test)[:, 1]
-kalibrerer  = IsotonicRegression(out_of_bounds="clip")
-kalibrerer.fit(y_rå, y_test)
+# Kalibratoren fittes KUN på kalibreringssettet — aldri på testsettet.
+# Testsettet skal først møte kalibratoren gjennom .predict(), aldri .fit()
+# (CALIB-01).
+y_rå_kalibrer = modell.predict_proba(X_kalibrer)[:, 1]
+kalibrerer    = IsotonicRegression(out_of_bounds="clip")
+# Kalibreringssettet er lite og har et smalere score-spenn enn testsettet,
+# så testscorer utenfor det observerte området må klippes til nærmeste
+# kalibrerte verdi. Sklearn-standarden "nan" ville stille korrumpert både
+# metrikkene og bøttetabellen under (RESEARCH.md Pitfall 3).
+kalibrerer.fit(y_rå_kalibrer, y_kalibrer)
 
-y_sann_kal  = kalibrerer.predict(y_rå)
-logloss_kal = log_loss(y_test, y_sann_kal)
-brier_kal   = brier_score_loss(y_test, y_sann_kal)
+# Score testsettet gjennom den allerede fittede kalibratoren — testsettet
+# har aldri blitt sett under noen .fit()-kall.
+y_rå_test   = modell.predict_proba(X_test)[:, 1]
+y_kal_test  = kalibrerer.predict(y_rå_test)
+logloss_kal = log_loss(y_test, y_kal_test)
+brier_kal   = brier_score_loss(y_test, y_kal_test)
 
-print(f"\n--- Kalibrering: før vs etter ---")
+print(f"\n{'=' * 60}")
+print(f"Kalibrator FITTET på:   kalibreringssett ({len(X_kalibrer)} kamper)")
+print(f"Kalibrator EVALUERT på: testsett ({len(X_test)} kamper) — aldri sett under fitting")
+print(f"{'=' * 60}")
+
+print(f"\n--- Kalibrering: før vs etter (målt på testsettet) ---")
 print(f"{'':25} {'Ukalibrert':>12} {'Kalibrert':>12}")
 print(f"{'Log-loss':25} {logloss:>12.4f} {logloss_kal:>12.4f}")
 print(f"{'Brier Score':25} {brier:>12.4f} {brier_kal:>12.4f}")
 print(f"(Lavere er bedre for begge)")
+print(f"Merk: hvis Kalibrert er DÅRLIGERE enn Ukalibrert, har isotonic-fitten")
+print(f"sannsynligvis overfittet det lille kalibreringssettet — et funn å ta")
+print(f"videre, ikke noe å skjule.")
 
-# Diagnose: sammenlign forutsagt sannsynlighet med faktisk treffsrate per bøtte
-print(f"\n--- Kalibreringsdiagnose (10 bøtter) ---")
+# In-sample-diagnose på kalibreringssettet — KUN diagnostisk, IKKE et mål på
+# generalisering (kalibratoren har sett akkurat disse dataene under fitting).
+y_kal_kalibrer        = kalibrerer.predict(y_rå_kalibrer)
+logloss_kal_insample  = log_loss(y_kalibrer, y_kal_kalibrer)
+brier_kal_insample    = brier_score_loss(y_kalibrer, y_kal_kalibrer)
+print(f"\n--- In-sample på kalibreringssettet (kun diagnostisk, IKKE et mål på generalisering) ---")
+print(f"Log-loss: {logloss_kal_insample:.4f}   Brier Score: {brier_kal_insample:.4f}")
+
+# Diagnose: sammenlign forutsagt sannsynlighet med faktisk treffsrate per
+# bøtte — beregnet på TESTSETTET (out-of-sample), som kalibratoren aldri
+# fikk se under fitting.
+print(f"\n--- Kalibreringsdiagnose / reliabilitetstabell — TESTSETT (out-of-sample, 10 bøtter) ---")
+if len(X_kalibrer) < 1000:
+    print(f"(NB: kalibreringssett: {len(X_kalibrer)} kamper — under sklearns anbefalte ~1000)")
 print(f"{'Pred. sann. (kal.)':>20} {'Faktisk treffsrate':>20} {'Antall kamper':>15}")
-diag = pd.DataFrame({"pred": y_sann_kal, "faktisk": y_test.values})
+diag = pd.DataFrame({"pred": y_kal_test, "faktisk": y_test.values})
 for _, gruppe in diag.groupby(pd.cut(diag["pred"], bins=10), observed=True):
     if len(gruppe) > 0:
         print(f"{gruppe['pred'].mean():>20.1%} {gruppe['faktisk'].mean():>20.1%} {len(gruppe):>15}")
