@@ -108,3 +108,60 @@ def test_logg_kreditt_tolererer_manglende_headers(con):
         "SELECT kreditt_brukt, kreditt_igjen FROM kreditt_logg"
     ).fetchone()
     assert rad == (None, None)
+
+
+# --- Tidsstempel-logikk (plan 04-03): morgen-of-game-day, Eastern kampdato, ---
+# --- 5-minutters-rutenett og lukketidspunkt. Alt offline, ingen datetime.now(). ---
+
+
+def test_morgen_tidspunkt_returnerer_1300_utc():
+    assert odds.morgen_tidspunkt("2023-01-15") == "2023-01-15T13:00:00Z"
+
+
+def test_kamp_dato_fra_commence_kveldskamp_krysser_utc_dogn():
+    # 19:30 ET tipoff er allerede neste UTC-dogn, men horer til 15.'s NBA-slate
+    assert odds.kamp_dato_fra_commence("2023-01-16T00:30:00Z") == "2023-01-15"
+
+
+def test_kamp_dato_fra_commence_ettermiddagskamp_samme_utc_dogn():
+    assert odds.kamp_dato_fra_commence("2023-01-15T20:00:00Z") == "2023-01-15"
+
+
+def test_kamp_dato_fra_commence_handterer_sommertid_dst():
+    # EDT (UTC-4) om sommeren, ikke en hardkodet -5-offset
+    assert odds.kamp_dato_fra_commence("2023-07-04T23:00:00Z") == "2023-07-04"
+
+
+def test_snap_til_5min_runder_ned_aldri_opp():
+    assert odds.snap_til_5min("2023-01-16T00:17:43Z") == "2023-01-16T00:15:00Z"
+
+
+def test_grupper_commence_tider_grupperer_naerliggende_tidspunkt():
+    tider = [
+        "2023-01-16T00:00:00Z",
+        "2023-01-16T00:30:00Z",
+        "2023-01-16T03:00:00Z",
+    ]
+    klynger = odds.grupper_commence_tider(tider)
+    assert klynger == [
+        ["2023-01-16T00:00:00Z", "2023-01-16T00:30:00Z"],
+        ["2023-01-16T03:00:00Z"],
+    ]
+
+
+def test_grupper_commence_tider_tom_liste():
+    assert odds.grupper_commence_tider([]) == []
+
+
+def test_grupper_commence_tider_godtar_event_dicter():
+    events = [
+        {"commence_time": "2023-01-16T00:00:00Z"},
+        {"commence_time": "2023-01-16T00:30:00Z"},
+    ]
+    klynger = odds.grupper_commence_tider(events)
+    assert klynger == [["2023-01-16T00:00:00Z", "2023-01-16T00:30:00Z"]]
+
+
+def test_lukketidspunkt_15min_for_tidligste_tipoff_paa_5min_rutenett():
+    klynge = ["2023-01-16T00:30:00Z", "2023-01-16T01:00:00Z"]
+    assert odds.lukketidspunkt(klynge) == "2023-01-16T00:15:00Z"
