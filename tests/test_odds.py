@@ -14,6 +14,7 @@ plan 04-07 sin eksplisitt godkjente smoke-test.
 import sqlite3
 from unittest.mock import patch
 
+import pandas as pd
 import pytest
 import requests
 
@@ -535,3 +536,218 @@ def test_ingen_per_event_endepunkt_i_bruk():
     with open("odds.py") as f:
         innhold = f.read()
     assert "events/{" not in innhold
+
+
+# ---------------------------------------------------------------------------
+# Plan 04-05: kjor_backfill - den gjenopptagbare, kredittbegrensede
+# backfill-driveren, pluss hent_unike_kampdatoer og kun_event_ider-utvidelsen
+# av parse_snapshot_til_rader. ALLE tester her mocker odds.requests.get -
+# ingen av dem naar nettverket eller leser den ekte nba_features.csv.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_snapshot_kun_event_ider_filtrerer_bort_andre_kamper():
+    kamp_a = _kamp(event_id="evt-a", commence_time="2023-01-16T00:00:00Z")
+    kamp_b = _kamp(
+        event_id="evt-b",
+        commence_time="2023-01-16T00:30:00Z",
+        home_team="Golden State Warriors",
+        away_team="LA Clippers",
+    )
+    snapshot = _snapshot([kamp_a, kamp_b])
+    rader = odds.parse_snapshot_til_rader(
+        snapshot, "2023-01-15", "closing",
+        hentet_tidspunkt="2026-08-23T12:00:00", kun_event_ider={"evt-a"},
+    )
+    event_id_kolonne = 1
+    assert len(rader) == 2
+    assert all(rad[event_id_kolonne] == "evt-a" for rad in rader)
+
+
+def test_hent_unike_kampdatoer_dedupliserer_og_sorterer(tmp_path):
+    csv_fil = tmp_path / "features.csv"
+    pd.DataFrame({
+        "GAME_DATE_HJEMME": ["2023-01-16", "2022-10-24", "2023-01-16", "2022-10-25"],
+        "annen_kolonne": [1, 2, 3, 4],
+    }).to_csv(csv_fil, index=False)
+
+    datoer = odds.hent_unike_kampdatoer(str(csv_fil))
+    assert datoer == ["2022-10-24", "2022-10-25", "2023-01-16"]
+
+
+def test_hent_unike_kampdatoer_respekterer_fra_til(tmp_path):
+    csv_fil = tmp_path / "features.csv"
+    pd.DataFrame({
+        "GAME_DATE_HJEMME": ["2022-10-24", "2023-01-05", "2023-01-15", "2023-01-31", "2023-02-01"],
+    }).to_csv(csv_fil, index=False)
+
+    datoer = odds.hent_unike_kampdatoer(str(csv_fil), fra="2023-01-01", til="2023-01-31")
+    assert datoer == ["2023-01-05", "2023-01-15", "2023-01-31"]
+
+
+def test_hent_unike_kampdatoer_mangler_fil_gir_filenotfound(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        odds.hent_unike_kampdatoer(str(tmp_path / "finnes-ikke.csv"))
+
+
+@patch("odds.requests.get")
+def test_torrkjor_gjor_null_http_kall(mock_get):
+    con = odds.apne_arkiv(":memory:")
+    resultat = odds.kjor_backfill(
+        con, api_nokkel=None, datoer=["2023-01-15", "2023-01-16"],
+        snapshot_type="bet_time", maks_kreditt=1000, utfor=False,
+    )
+    assert mock_get.call_count == 0
+    assert resultat["kall"] == 0
+
+
+@patch("odds.requests.get")
+def test_er_allerede_arkivert_hindrer_dobbelt_kall(mock_get):
+    con = odds.apne_arkiv(":memory:")
+    odds.arkiver_odds_rader(con, [_rad(snapshot_type="bet_time")])  # _rad() default kamp_dato = 2023-01-15
+
+    resultat = odds.kjor_backfill(
+        con, api_nokkel="test-nokkel", datoer=["2023-01-15"],
+        snapshot_type="bet_time", maks_kreditt=1000, utfor=True,
+    )
+    assert mock_get.call_count == 0
+    assert resultat["hoppet_over"] == 1
+
+
+@patch("odds.requests.get")
+def test_kredittgrense_stopper_lopet(mock_get):
+    con = odds.apne_arkiv(":memory:")
+    snapshot = _snapshot([])
+    mock_get.return_value = SvarMock(
+        status_code=200, json_data=snapshot, headers={"x-requests-last": "10"}
+    )
+
+    resultat = odds.kjor_backfill(
+        con, api_nokkel="test-nokkel", datoer=["2023-01-15", "2023-01-16"],
+        snapshot_type="bet_time", maks_kreditt=10, utfor=True,
+    )
+    assert mock_get.call_count == 1
+    assert resultat["avbrutt_grunn"] == "kredittgrense"
+
+
+@patch("time.sleep", lambda *a, **k: None)
+@patch("odds.requests.get")
+def test_bet_time_arkiverer_rader_og_teller_riktig(mock_get):
+    con = odds.apne_arkiv(":memory:")
+    kamp = _kamp(commence_time="2023-01-16T00:30:00Z")  # -> 2023-01-15 pa NBA-kalenderen
+    snapshot = _snapshot([kamp], timestamp="2023-01-15T13:00:12Z")
+    mock_get.return_value = SvarMock(
+        status_code=200, json_data=snapshot, headers={"x-requests-last": "10"}
+    )
+
+    resultat = odds.kjor_backfill(
+        con, api_nokkel="test-nokkel", datoer=["2023-01-15"],
+        snapshot_type="bet_time", maks_kreditt=1000, utfor=True,
+    )
+
+    assert resultat["nye_rader"] == 2
+    assert resultat["kreditt_brukt"] == 10
+    assert con.execute("SELECT COUNT(*) FROM odds_arkiv").fetchone()[0] == 2
+
+
+@patch("time.sleep", lambda *a, **k: None)
+@patch("odds.requests.get")
+def test_closing_lager_en_discovery_og_to_klynge_kall_kronologisk(mock_get):
+    con = odds.apne_arkiv(":memory:")
+
+    hendelser = [
+        {"id": "evt-c", "home_team": "Golden State Warriors", "away_team": "LA Clippers",
+         "commence_time": "2023-01-16T03:00:00Z"},
+        {"id": "evt-a", "home_team": "Boston Celtics", "away_team": "Miami Heat",
+         "commence_time": "2023-01-16T00:00:00Z"},
+        {"id": "evt-b", "home_team": "Toronto Raptors", "away_team": "Chicago Bulls",
+         "commence_time": "2023-01-16T00:30:00Z"},
+    ]
+    kamp_a = _kamp(event_id="evt-a", commence_time="2023-01-16T00:00:00Z",
+                    home_team="Boston Celtics", away_team="Miami Heat")
+    kamp_b = _kamp(event_id="evt-b", commence_time="2023-01-16T00:30:00Z",
+                    home_team="Toronto Raptors", away_team="Chicago Bulls")
+    kamp_c = _kamp(event_id="evt-c", commence_time="2023-01-16T03:00:00Z",
+                    home_team="Golden State Warriors", away_team="LA Clippers")
+
+    mock_get.side_effect = [
+        SvarMock(status_code=200, json_data={"data": hendelser}, headers={"x-requests-last": "1"}),
+        SvarMock(status_code=200, json_data=_snapshot([kamp_a, kamp_b, kamp_c], timestamp="2023-01-16T00:15:00Z"),
+                 headers={"x-requests-last": "10"}),
+        SvarMock(status_code=200, json_data=_snapshot([kamp_a, kamp_b, kamp_c], timestamp="2023-01-16T02:45:00Z"),
+                 headers={"x-requests-last": "10"}),
+    ]
+
+    resultat = odds.kjor_backfill(
+        con, api_nokkel="test-nokkel", datoer=["2023-01-15"],
+        snapshot_type="closing", maks_kreditt=1000, utfor=True,
+    )
+
+    assert mock_get.call_count == 3
+    assert resultat["kall"] == 3
+    assert resultat["nye_rader"] == 6  # 2 klynge-1-kamper x 2 utfall + 1 klynge-2-kamp x 2 utfall
+    assert resultat["kreditt_brukt"] == 21  # 1 discovery + 10 + 10
+
+    forste_klynge_dato = mock_get.call_args_list[1].kwargs["params"]["date"]
+    andre_klynge_dato = mock_get.call_args_list[2].kwargs["params"]["date"]
+    assert forste_klynge_dato < andre_klynge_dato  # kronologisk rekkefolge
+
+    rader = con.execute(
+        "SELECT event_id, COUNT(*) FROM odds_arkiv WHERE snapshot_type='closing' GROUP BY event_id"
+    ).fetchall()
+    assert dict(rader) == {"evt-a": 2, "evt-b": 2, "evt-c": 2}
+
+
+@patch("time.sleep", lambda *a, **k: None)
+@patch("odds.requests.get")
+def test_closing_kredittgrense_stopper_midt_i_klyngelokke(mock_get):
+    con = odds.apne_arkiv(":memory:")
+    hendelser = [
+        {"id": "evt-a", "home_team": "Boston Celtics", "away_team": "Miami Heat",
+         "commence_time": "2023-01-16T00:00:00Z"},
+        {"id": "evt-c", "home_team": "Golden State Warriors", "away_team": "LA Clippers",
+         "commence_time": "2023-01-16T03:00:00Z"},
+    ]
+    kamp_a = _kamp(event_id="evt-a", commence_time="2023-01-16T00:00:00Z")
+
+    mock_get.side_effect = [
+        SvarMock(status_code=200, json_data={"data": hendelser}, headers={"x-requests-last": "1"}),
+        SvarMock(status_code=200, json_data=_snapshot([kamp_a], timestamp="2023-01-16T00:15:00Z"),
+                 headers={"x-requests-last": "10"}),
+    ]
+
+    resultat = odds.kjor_backfill(
+        con, api_nokkel="test-nokkel", datoer=["2023-01-15"],
+        snapshot_type="closing", maks_kreditt=11, utfor=True,
+    )
+
+    # discovery (1) + forste klynge (10) = 11 <= maks; andre klynge ville krevd 10 til -> stopper
+    assert mock_get.call_count == 2
+    assert resultat["avbrutt_grunn"] == "kredittgrense"
+
+
+@patch("time.sleep", lambda *a, **k: None)
+@patch("odds.requests.get")
+def test_arkiv_beholder_data_ved_avbrudd_midt_i_lopet(mock_get, tmp_path):
+    sti = str(tmp_path / "backfill_test.db")
+    con = odds.apne_arkiv(sti)
+
+    kamp = _kamp(commence_time="2023-01-16T00:30:00Z")
+    snapshot = _snapshot([kamp])
+    mock_get.side_effect = [
+        SvarMock(status_code=200, json_data=snapshot, headers={"x-requests-last": "10"}),
+        requests.exceptions.ConnectionError("simulert avbrudd"),
+    ]
+
+    resultat = odds.kjor_backfill(
+        con, api_nokkel="test-nokkel", datoer=["2023-01-15", "2023-01-16"],
+        snapshot_type="bet_time", maks_kreditt=1000, utfor=True,
+    )
+    con.close()
+
+    assert resultat["avbrutt_grunn"] is None
+    assert mock_get.call_count == 2
+
+    con2 = odds.apne_arkiv(sti)
+    assert odds.er_allerede_arkivert(con2, "2023-01-15", "bet_time") is True
+    assert odds.er_allerede_arkivert(con2, "2023-01-16", "bet_time") is False
