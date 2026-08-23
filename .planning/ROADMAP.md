@@ -131,7 +131,7 @@ Plans:
 **Wave 1**
 
 - [x] 04-01-PLAN.md — Endepunkt-korreksjon i kildedokumenter + odds.py SQLite-arkivlag (skjema, eksistenssjekk, idempotent innsetting, kredittlogg)
-- [ ] 04-02-PLAN.md — ODDS-02: skadefilter.py ekstrahert som importerbar modul, 05_skadefilter.py blir tynn CLI-wrapper
+- [x] 04-02-PLAN.md — ODDS-02: skadefilter.py ekstrahert som importerbar modul, 05_skadefilter.py blir tynn CLI-wrapper
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -180,5 +180,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
-| 4. Historical Odds Acquisition & Live Refactor | 1/9 | In Progress|  |
+| 4. Historical Odds Acquisition & Live Refactor | 2/9 | In Progress|  |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |
