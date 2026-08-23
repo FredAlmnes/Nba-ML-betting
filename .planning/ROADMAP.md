@@ -114,13 +114,13 @@ Plans are strictly sequential (waves 1-6): every plan commits against one shared
 
 **Goal**: Historical odds needed for backtesting are fetched once and archived permanently so further backtest iteration costs no additional API credits, and the live bot runs on the exact same shared core the backtest will use.
 
-**Decision point (phase entry):** The Odds API's free tier (500 credits) is not enough for a full-season historical backtest; the paid tier (~$30/mo for 20K credits) is needed. This has not been decided yet. Confirm the budget decision before starting the historical-odds-fetch work in this phase — it does not block starting the live-refactor half of this phase (ODDS-02), which has no API-cost dependency.
+**Decision point (phase entry):** RESOLVED 2026-08-23: The Odds API's free tier (500 credits) is not enough for a full-season historical backtest; the paid tier (~$30/mo for 20K credits) is needed. The user purchased one month of the 20,000-credit tier on 2026-08-23, so ODDS-01 is unblocked.
 
 **Depends on**: Phase 3
 **Requirements**: ODDS-01, ODDS-02
 **Success Criteria** (what must be TRUE):
 
-  1. Historical odds for the target date range are fetched via The Odds API's per-event historical endpoint and persisted permanently in SQLite; re-running the fetch for an already-archived date/event consumes zero additional API credits
+  1. Historical odds for the target date range are fetched via The Odds API's sport-wide historical endpoint (`/v4/historical/sports/{sport}/odds`), one call per unique game date, and persisted permanently in SQLite; re-running the fetch for an already-archived date/event consumes zero additional API credits (endpoint amended 2026-08-23 per Phase 4 D-03 — both endpoints cost 10 x markets x regions, but per-event charges per game queried; sport-wide charges once per snapshot)
   2. `06_bot.py` calls into the shared core (`features.py`/`strategy.py`/`teams.py`) directly instead of invoking `04_value_detector.py`/`05_skadefilter.py` as subprocesses
   3. The SQLite archive can be queried to reconstruct "odds as known on date D" for any archived event, independent of the live API
 

@@ -27,7 +27,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Historical Odds & Live Refactor
 
-- [ ] **ODDS-01**: Historical odds are fetched via The Odds API's per-event historical endpoint and archived permanently in SQLite, so re-running/iterating on the backtest costs no further API credits
+- [ ] **ODDS-01**: Historical odds are fetched via The Odds API's sport-wide historical endpoint (`/v4/historical/sports/{sport}/odds`), one call per unique game date, and archived permanently in SQLite, so re-running/iterating on the backtest costs no further API credits (endpoint amended 2026-08-23 per Phase 4 D-03 — both endpoints cost 10 x markets x regions, but per-event charges per game queried; sport-wide charges once per snapshot)
 - [ ] **ODDS-02**: `06_bot.py` imports the shared core directly instead of invoking `04_value_detector.py`/`05_skadefilter.py` as subprocesses
 
 ### Backtest Engine (the core deliverable)
@@ -64,7 +64,7 @@ Explicitly excluded. Documented to prevent scope creep.
 | Generalized multi-sport/multi-market backtesting framework | Would delay validating the one strategy actually at stake; build scoped to what exists today |
 | In-sample threshold/parameter tuning without a locked holdout | Anti-pattern — this is exactly how the current losing thresholds were arrived at; the whole point of BT-03 is to prevent repeating it |
 
-**Open budget decision:** A full-season historical backtest needs The Odds API's paid tier (~$30/mo for 20K credits) — the free 500-credit tier isn't enough. Not yet decided; flagged for a decision at the start of the Historical Odds Acquisition phase (see ODDS-01).
+**Open budget decision:** RESOLVED 2026-08-23: A full-season historical backtest needs The Odds API's paid tier (~$30/mo for 20K credits) — the free 500-credit tier isn't enough. The user purchased one month of the 20,000-credit tier on 2026-08-23, unblocking ODDS-01 (originally flagged for a decision at the start of the Historical Odds Acquisition phase).
 
 ## Traceability
 
