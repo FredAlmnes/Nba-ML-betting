@@ -450,3 +450,88 @@ def test_api_nokkel_aldri_i_printet_output(mock_get, capsys):
         odds.hent_live_odds(api_nokkel=hemmelig)
     utdata = capsys.readouterr().out
     assert hemmelig not in utdata
+
+
+# ---------------------------------------------------------------------------
+# Plan 04-04: de historiske endepunktene (hent_historisk_odds_snapshot,
+# hent_historiske_events). Begge returnerer (body, headers) og lar kalleren
+# eie kredittregnskapet - ingen av dem skriver til arkivet selv.
+# ---------------------------------------------------------------------------
+
+
+@patch("odds.requests.get")
+def test_hent_historisk_odds_snapshot_kaller_riktig_url_og_params(mock_get):
+    mock_get.return_value = SvarMock(
+        status_code=200,
+        json_data={"timestamp": "2023-01-15T13:00:00Z", "data": []},
+        headers={"x-requests-last": "10"},
+    )
+    odds.hent_historisk_odds_snapshot("test-nokkel", "2023-01-15T13:00:00Z")
+
+    kall_args, kall_kwargs = mock_get.call_args
+    assert kall_args[0] == "https://api.the-odds-api.com/v4/historical/sports/basketball_nba/odds"
+    params = kall_kwargs["params"]
+    assert params["apiKey"] == "test-nokkel"
+    assert params["regions"] == "eu"
+    assert params["markets"] == "h2h"
+    assert params["oddsFormat"] == "decimal"
+    assert params["dateFormat"] == "iso"
+    assert params["date"] == "2023-01-15T13:00:00Z"
+
+
+@patch("odds.requests.get")
+def test_hent_historisk_odds_snapshot_returnerer_body_og_headers(mock_get):
+    body = {"timestamp": "2023-01-15T13:00:00Z", "data": [{"id": "evt-1"}]}
+    headers = {"x-requests-last": "10", "x-requests-remaining": "19980"}
+    mock_get.return_value = SvarMock(status_code=200, json_data=body, headers=headers)
+
+    snapshot, mottatte_headers = odds.hent_historisk_odds_snapshot("test-nokkel", "2023-01-15T13:00:00Z")
+    assert snapshot == body
+    assert mottatte_headers == headers
+
+
+@patch("odds.requests.get")
+def test_hent_historisk_odds_snapshot_uten_timestamp_returneres_som_den_er(mock_get):
+    body = {"data": []}
+    mock_get.return_value = SvarMock(status_code=200, json_data=body)
+
+    snapshot, _ = odds.hent_historisk_odds_snapshot("test-nokkel", "2023-01-15T13:00:00Z")
+    assert snapshot == body
+
+
+@patch("odds.requests.get")
+def test_hent_historiske_events_kaller_riktig_url_og_params(mock_get):
+    mock_get.return_value = SvarMock(status_code=200, json_data=[], headers={"x-requests-last": "1"})
+    odds.hent_historiske_events(
+        "test-nokkel", "2023-01-15T13:00:00Z", "2023-01-15T00:00:00Z", "2023-01-16T00:00:00Z"
+    )
+
+    kall_args, kall_kwargs = mock_get.call_args
+    assert kall_args[0] == "https://api.the-odds-api.com/v4/historical/sports/basketball_nba/events"
+    params = kall_kwargs["params"]
+    assert params["apiKey"] == "test-nokkel"
+    assert params["date"] == "2023-01-15T13:00:00Z"
+    assert params["commenceTimeFrom"] == "2023-01-15T00:00:00Z"
+    assert params["commenceTimeTo"] == "2023-01-16T00:00:00Z"
+    assert "regions" not in params
+    assert "markets" not in params
+
+
+@patch("odds.requests.get")
+def test_hent_historiske_events_returnerer_svar_og_headers(mock_get):
+    events = [{"id": "evt-1", "home_team": "Boston Celtics", "away_team": "Miami Heat",
+               "commence_time": "2023-01-15T18:00:00Z"}]
+    headers = {"x-requests-last": "1", "x-requests-remaining": "19979"}
+    mock_get.return_value = SvarMock(status_code=200, json_data=events, headers=headers)
+
+    svar, mottatte_headers = odds.hent_historiske_events(
+        "test-nokkel", "2023-01-15T13:00:00Z", "2023-01-15T00:00:00Z", "2023-01-16T00:00:00Z"
+    )
+    assert svar == events
+    assert mottatte_headers == headers
+
+
+def test_ingen_per_event_endepunkt_i_bruk():
+    with open("odds.py") as f:
+        innhold = f.read()
+    assert "events/{" not in innhold
