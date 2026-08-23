@@ -21,9 +21,11 @@ Dette plan-et (04-01) legger kun persistenslaget — ingen nettverkskode her enn
 import os
 import sqlite3
 import sys
+import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import requests
 from dotenv import load_dotenv
 from tenacity import (
@@ -434,7 +436,7 @@ def lukketidspunkt(klynge, minutter_for=15):
     return snap_til_5min(forskjøvet)
 
 
-def parse_snapshot_til_rader(snapshot, kamp_dato, snapshot_type, hentet_tidspunkt=None):
+def parse_snapshot_til_rader(snapshot, kamp_dato, snapshot_type, hentet_tidspunkt=None, kun_event_ider=None):
     """
     Konverterer en sport-wide historisk odds-respons til en liste av
     arkivrader (samme 15-felts rekkefolge som SKJEMA/arkiver_odds_rader).
@@ -443,6 +445,13 @@ def parse_snapshot_til_rader(snapshot, kamp_dato, snapshot_type, hentet_tidspunk
     `previous_timestamp`/`next_timestamp`/`data`). `kamp_dato` er NBA-
     kampdatoen dette kallet ble gjort for. `snapshot_type` er "bet_time"
     eller "closing".
+
+    `kun_event_ider` (plan 04-05): valgfri collection av event-id-er. Når
+    den er ikke-tom, hoppes enhver kamp hvis `id` IKKE er i settet helt over
+    — dette er hvordan et closing-kall for én avspark-klynge unngår å også
+    arkivere en senere klynges kamper, som enda ikke har hatt sin ekte
+    closing-linje (T-04-23). `None`/tom betyr "ingen filtrering", som
+    tidligere.
 
     Kamper hvis commence_time hoerer til en annen NBA-kampdato enn
     `kamp_dato` droppes helt — de blir ALDRI ombenevnt til forespurt dato
@@ -465,6 +474,9 @@ def parse_snapshot_til_rader(snapshot, kamp_dato, snapshot_type, hentet_tidspunk
 
     rader = []
     for kamp in snapshot.get("data", []):
+        if kun_event_ider and kamp["id"] not in kun_event_ider:
+            continue
+
         spill_dato = kamp_dato_fra_commence(kamp["commence_time"])
         if spill_dato != kamp_dato:
             continue
@@ -498,3 +510,219 @@ def parse_snapshot_til_rader(snapshot, kamp_dato, snapshot_type, hentet_tidspunk
                     ))
 
     return rader
+
+
+# ---------------------------------------------------------------------------
+# Backfill-driveren (plan 04-05)
+#
+# Dette er den eneste koden i denne modulen som faktisk kan bruke opp
+# manedens 20 000 kreditter - derfor er hver linje i kjor_backfill sin lokke
+# skrevet i en eksplisitt, sikkerhets-motivert rekkefolge (se docstringen
+# under). Selve dette plan-et bruker ALDRI et ekte nettverkskall - alle
+# tester mocker odds.requests.get. Det faktiske, kreditt-brukende lopet
+# skjer forst i plan 04-07/04-09, etter eksplisitt menneskelig godkjenning
+# av en kredittgrense (D-04).
+# ---------------------------------------------------------------------------
+
+
+def hent_unike_kampdatoer(features_fil="nba_features.csv", fra=None, til=None):
+    """
+    Leser `features_fil` sin GAME_DATE_HJEMME-kolonne og returnerer alle
+    unike kampdatoer ("YYYY-MM-DD") i stigende rekkefolge - dette ER listen
+    kjor_backfill skal lope over (480 datoer, 2022-10-24 til 2025-04-13,
+    verifisert i 04-RESEARCH.md).
+
+    Kolonnen sikres til str og slices til de forste 10 tegnene - kolonnen
+    inneholder allerede rene datoer, men slicen gjor funksjonen robust om en
+    fremtidig regenerering av filen skulle skrive fulle tidsstempler i stedet.
+    Siden ISO-datoer sorterer leksikografisk riktig, bruker `fra`/`til` rene
+    strengsammenligninger (inklusive begge endepunkt) - ingen datetime-
+    parsing er nodvendig.
+
+    Kaster FileNotFoundError med en norsk melding som navngir
+    02_feature_engineering.py som produsenten hvis filen mangler - samme
+    monster som 05_skadefilter.py sin eksisterende "kjor forrige steg
+    forst"-konvensjon for manglende input-filer.
+    """
+    try:
+        df = pd.read_csv(features_fil)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"Finner ikke '{features_fil}' - kjor 02_feature_engineering.py forst!"
+        )
+
+    datoer = df["GAME_DATE_HJEMME"].astype(str).str[:10]
+    unike = sorted(set(datoer))
+
+    if fra is not None:
+        unike = [dato for dato in unike if dato >= fra]
+    if til is not None:
+        unike = [dato for dato in unike if dato <= til]
+
+    return unike
+
+
+def kjor_backfill(con, api_nokkel, datoer, snapshot_type, maks_kreditt, utfor=False):
+    """
+    Kjorer den gjenopptagbare, kredittbegrensede historiske backfillen over
+    `datoer` for gitt `snapshot_type` ("bet_time" eller "closing").
+
+    Returnerer en teller-dict:
+      datoer_totalt   - len(datoer)
+      hoppet_over     - antall datoer som allerede var arkivert (gratis skip)
+      ville_hentet    - antall datoer en torrkjoring VILLE hentet (utfor=False)
+      kall            - antall faktiske requests.get-kall gjort totalt
+      kreditt_brukt   - faktisk rapportert forbruk (x-requests-last), ALDRI
+                         estimatet - estimatet brukes kun til a avgjore om
+                         kredittgrensen tillater at kallet i det hele tatt
+                         gjores
+      nye_rader       - sum av arkiver_odds_rader sine retur-tall
+      avbrutt_grunn   - None hvis lopet gikk til slutten, ellers en streng
+                         som forklarer hvorfor det stoppet ("kredittgrense")
+
+    Lokkekroppen folger denne rekkefolgen for HVER dato, og rekkefolgen ER
+    sikkerhetsegenskapen (D-04, T-04-20, T-04-21, T-04-22):
+
+      1. Sjekk er_allerede_arkivert() FOR noe annet skjer. Dette er den
+         ENESTE tingen som gjor et gjenopptatt lop gratis - "INSERT OR
+         IGNORE" i arkiver_odds_rader() er bare et sikkerhetsnett mot
+         dobbel-insert, IKKE en kredittsparings-mekanisme, fordi kreditten
+         allerede er brukt nar et slikt kall nar frem.
+      2. Hvis utfor=False: dette er en torrkjoring - hopp til neste dato uten
+         a lese noen API-nokkel i det hele tatt.
+      3. Estimer denne datoens kostnad og sjekk mot maks_kreditt FOR noe kall
+         gjores. Ved brudd: sett avbrutt_grunn og BREAK (aldri continue) -
+         a fortsette til neste dato etter et brudd ville gjort grensen
+         meningslos, og det neste lopet plukker opp akkurat her, helt gratis,
+         siden ingenting av denne datoen ble arkivert.
+      4. Gjor selve kallet/kallene, arkiver, logg faktisk kredittforbruk fra
+         responsens x-requests-last-header.
+
+    "closing"-stien gjor i tillegg ett billig discovery-kall (1 kreditt) for
+    a finne de faktiske avspark-tidspunktene, grupperer dem i klynger
+    (grupper_commence_tider), og gjor sa ETT odds-kall PER klynge - kreditt-
+    grensen sjekkes pa nytt for HVER klynge, ikke bare en gang per dato,
+    siden en enkelt travel NBA-dato kan ha flere klynger. kun_event_ider
+    sikrer at hver klynges kall bare arkiverer kampene i akkurat den klyngen
+    (T-04-23) - klyngene behandles i kronologisk rekkefolge.
+
+    En bred `except Exception` rundt hver dato betyr at én darlig dato aldri
+    kan avslutte et 480-dagers betalt lop for tidlig (T-04-25). SystemExit
+    (kastet av _utfor_kall for ikke-forbigaende feil som feil API-nokkel)
+    arves IKKE fra Exception og fanges derfor aldri her med vilje - en slik
+    feil vil gjenta seg for enhver gjenstaende dato, sa lopet skal stoppe
+    hoyt i stedet for a sloe bort resten av kredittbudsjettet pa gjentatte feil.
+    """
+    resultat = {
+        "datoer_totalt": len(datoer),
+        "hoppet_over": 0,
+        "ville_hentet": 0,
+        "kall": 0,
+        "kreditt_brukt": 0,
+        "nye_rader": 0,
+        "avbrutt_grunn": None,
+    }
+
+    for i, dato in enumerate(datoer, start=1):
+        print(f"[{i}/{len(datoer)}] {dato} ({snapshot_type})")
+
+        if er_allerede_arkivert(con, dato, snapshot_type):
+            resultat["hoppet_over"] += 1
+            print("  allerede arkivert - hopper over (gratis)")
+            continue
+
+        if not utfor:
+            resultat["ville_hentet"] += 1
+            print("  (torrkjoring - ingen kall utfort)")
+            continue
+
+        forventet = 10 if snapshot_type == "bet_time" else 1  # bet_time: 1 odds-kall a 10;
+                                                                 # closing: discovery-kallet (1) forst,
+                                                                 # klyngekostnaden (10/stk) sjekkes for
+                                                                 # hvert klyngekall lenger ned
+        if resultat["kreditt_brukt"] + forventet > maks_kreditt:
+            resultat["avbrutt_grunn"] = "kredittgrense"
+            print(
+                f"  STOPPER: kredittgrense ({maks_kreditt}) nadd - "
+                f"{resultat['kreditt_brukt']} brukt sa langt, {forventet} forventet for denne datoen"
+            )
+            break
+
+        try:
+            if snapshot_type == "bet_time":
+                tidspunkt = morgen_tidspunkt(dato)
+                snapshot, headers = hent_historisk_odds_snapshot(api_nokkel, tidspunkt)
+                resultat["kall"] += 1
+                rader = parse_snapshot_til_rader(snapshot, dato, "bet_time")
+                nye = arkiver_odds_rader(con, rader)
+                resultat["nye_rader"] += nye
+                logg_kreditt(con, "historical_odds", tidspunkt, headers, len(rader))
+                resultat["kreditt_brukt"] += int(headers.get("x-requests-last", 0) or 0)
+                print(
+                    f"  snapshot ga {len(snapshot.get('data', []))} kamper totalt, "
+                    f"{len(rader)} rader falt innenfor {dato}"
+                )
+                time.sleep(0.2)  # kortesi - betalt-tier tillater 30 kall/sek, ikke nodvendig
+
+            else:  # closing
+                naeste_dag = (datetime.fromisoformat(dato) + timedelta(days=1)).strftime("%Y-%m-%d")
+                events_svar, events_headers = hent_historiske_events(
+                    api_nokkel,
+                    morgen_tidspunkt(dato),
+                    commence_fra=f"{dato}T12:00:00Z",
+                    commence_til=f"{naeste_dag}T12:00:00Z",
+                )
+                resultat["kall"] += 1
+                logg_kreditt(con, "historical_events", dato, events_headers, 0)
+                resultat["kreditt_brukt"] += int(events_headers.get("x-requests-last", 0) or 0)
+                time.sleep(0.2)
+
+                hendelser = events_svar["data"] if isinstance(events_svar, dict) else events_svar
+                klynger = grupper_commence_tider(hendelser)
+                klynger_sortert = sorted(klynger, key=lambda klynge: min(klynge, key=_parse_iso))
+
+                for klynge in klynger_sortert:
+                    if resultat["kreditt_brukt"] + 10 > maks_kreditt:
+                        resultat["avbrutt_grunn"] = "kredittgrense"
+                        print(
+                            f"  STOPPER: kredittgrense ({maks_kreditt}) nadd midt i klyngelokken for {dato}"
+                        )
+                        break
+
+                    lukk_tid = lukketidspunkt(klynge)
+                    kun_ider = {
+                        hendelse["id"] for hendelse in hendelser
+                        if isinstance(hendelse, dict) and hendelse.get("commence_time") in klynge
+                    }
+                    snapshot, headers = hent_historisk_odds_snapshot(api_nokkel, lukk_tid)
+                    resultat["kall"] += 1
+                    rader = parse_snapshot_til_rader(
+                        snapshot, dato, "closing", kun_event_ider=kun_ider
+                    )
+                    nye = arkiver_odds_rader(con, rader)
+                    resultat["nye_rader"] += nye
+                    logg_kreditt(con, "historical_odds", lukk_tid, headers, len(rader))
+                    resultat["kreditt_brukt"] += int(headers.get("x-requests-last", 0) or 0)
+                    time.sleep(0.2)
+
+                if resultat["avbrutt_grunn"] == "kredittgrense":
+                    break
+        except Exception as e:
+            print(f"  FEIL for {dato}: {e} - fortsetter til neste dato")
+            continue
+
+    print("=" * 60)
+    print("BACKFILL-OPPSUMMERING")
+    print("=" * 60)
+    print(f"Datoer totalt:  {resultat['datoer_totalt']}")
+    print(f"Hoppet over:    {resultat['hoppet_over']}")
+    if not utfor:
+        print(f"Ville hentet:   {resultat['ville_hentet']} (torrkjoring - legg til utfor=True for a hente)")
+    print(f"Kall utfort:    {resultat['kall']}")
+    print(f"Kreditt brukt:  {resultat['kreditt_brukt']}")
+    print(f"Nye rader:      {resultat['nye_rader']}")
+    if resultat["avbrutt_grunn"]:
+        print(f"Avbrutt:        {resultat['avbrutt_grunn']}")
+    print("=" * 60)
+
+    return resultat
