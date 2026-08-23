@@ -124,7 +124,36 @@ Plans are strictly sequential (waves 1-6): every plan commits against one shared
   2. `06_bot.py` calls into the shared core (`features.py`/`strategy.py`/`teams.py`) directly instead of invoking `04_value_detector.py`/`05_skadefilter.py` as subprocesses
   3. The SQLite archive can be queried to reconstruct "odds as known on date D" for any archived event, independent of the live API
 
-**Plans**: TBD
+**Plans**: 9 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Endepunkt-korreksjon i kildedokumenter + odds.py SQLite-arkivlag (skjema, eksistenssjekk, idempotent innsetting, kredittlogg)
+- [ ] 04-02-PLAN.md — ODDS-02: skadefilter.py ekstrahert som importerbar modul, 05_skadefilter.py blir tynn CLI-wrapper
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-03-PLAN.md — odds.py: tidsstempel-logikk (morgen-of-game-day, Eastern kampdato, lukketidspunkt) + parse_snapshot_til_rader via teams.py
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 04-04-PLAN.md — odds.py HTTP-klient: live + begge historiske endepunkter, kredittregnskap, retry (tenacity bak blokkerende legitimitetssjekk)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 04-05-PLAN.md — Backfill-driver: kjor_backfill + 07_hent_historisk_odds.py (tørrkjøring som standard, obligatorisk --maks-kreditt)
+- [ ] 04-06-PLAN.md — ODDS-02: verdi_deteksjon.py ekstrahert, 04_value_detector.py blir tynn CLI-wrapper, live-odds hentes fra odds.py
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 04-07-PLAN.md — Røyktest mot ekte API (maks 130 kreditter): mål kostnad, klynger, dekning, gratis gjenkjøring — deretter blokkerende godkjenning
+- [ ] 04-08-PLAN.md — ODDS-02: 06_bot.py importerer direkte, subprocess og python3.10-PYTHONPATH fjernes, krasjbarriere gjenopprettet
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 04-09-PLAN.md — Full backfill innenfor godkjent kredittak + arkivrapport med eksplisitte hull
 
 ### Phase 5: Walk-Forward Backtest Engine
 
