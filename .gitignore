@@ -13,6 +13,9 @@ nba_modell.pkl
 value_bets_idag.csv
 value_bets_med_skadefilter.csv
 
+# Historisk odds-arkiv (SQLite) – stort, dyrt-å-gjenskape lokalt artefakt
+odds_arkiv.db
+
 # Bankroll og bet-historikk – personlig data
 bankroll.json
 bets.json
