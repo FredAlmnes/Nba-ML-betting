@@ -18,9 +18,20 @@ et nytt, betalt API-kall.
 Dette plan-et (04-01) legger kun persistenslaget — ingen nettverkskode her ennå.
 """
 
+import os
 import sqlite3
+import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+import requests
+from dotenv import load_dotenv
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from teams import finn_lag_id
 
@@ -31,6 +42,14 @@ SPORT = "basketball_nba"
 MARKED = "h2h"          # Moneyline er hele v1-scopet — ikke legg til spread/totals
 REGION = "eu"            # Matcher 04_value_detector.py sin nåværende live-region,
                           # slik at backtest og live ser de samme bookmakerne
+
+BASIS_URL = "https://api.the-odds-api.com/v4"   # Eneste sted vertsnavnet star -
+                                                  # alle URL-er i denne modulen
+                                                  # bygges herfra (T-04-17).
+
+RETRYBARE_STATUSER = (429, 500, 502, 503, 504)   # Transiente feil - trygt a
+                                                  # prove igjen midt i et
+                                                  # betalt backfill-lop.
 
 # NBA-kampdatoer folger hjemmearenaens lokale kalenderdag (US Eastern), ikke
 # UTC — en 19:30 ET-avspark er allerede neste UTC-dogn, men horer fortsatt
@@ -164,6 +183,103 @@ def logg_kreditt(con, endepunkt, forespurt_dato, headers, antall_rader):
         ),
     )
     con.commit()
+
+
+# ---------------------------------------------------------------------------
+# HTTP-laget (plan 04-04)
+#
+# _utfor_kall er det ENESTE stedet i denne modulen som gjor et faktisk
+# requests.get-kall - bade hent_live_odds og de to historiske funksjonene
+# lenger ned gar via den, slik at retry-policy, feilhandtering og at
+# API-nokkelen aldri havner i print/exception-tekst kun matte implementeres
+# ett sted (T-04-15, T-04-16, T-04-18).
+#
+# Betalt-tier-grensen er 30 kall/sekund. Backfillens sekvensielle lokke (en
+# dato om gangen, ett kall per dato) kommer aldri i naerheten av det, sa det
+# trengs ingen egen klient-side rate-throttling her.
+# ---------------------------------------------------------------------------
+
+
+def hent_api_nokkel():
+    """
+    Leser ODDS_API_NOKKEL fra miljoet (via .env). sys.exit(1) hvis den mangler.
+
+    .env-innlastingen skjer her inne, IKKE pa modulniva - odds.py importeres
+    bade av tester og av 06_bot.py, og import-tidspunkt-sideeffekter er
+    nettopp det denne fasen fjerner fra 04_value_detector.py (D-07).
+    """
+    load_dotenv()
+    api_nokkel = os.environ.get("ODDS_API_NOKKEL")
+    if not api_nokkel:
+        print("FEIL: Miljøvariabelen ODDS_API_NOKKEL er ikke satt.")
+        print("Kopier .env.example til .env og fyll inn din egen nøkkel:")
+        print("  ODDS_API_NOKKEL=din-nøkkel-her")
+        print("Hent en gratis nøkkel fra https://the-odds-api.com")
+        sys.exit(1)  # NB: bare exit() gir exitkode 0 (=suksess) og gjemmer feilen
+    return api_nokkel
+
+
+@retry(
+    stop=stop_after_attempt(4),
+    wait=wait_exponential(multiplier=2, min=2, max=30),
+    retry=retry_if_exception_type(requests.exceptions.HTTPError),
+    reraise=True,
+)
+def _utfor_kall(url, params):
+    """
+    Eneste sted i modulen som kaller requests.get. Kaster aldri params videre
+    til print/logg - kun url-en, siden params inneholder apiKey.
+
+    - Status 200: returner responsen uendret.
+    - Status i RETRYBARE_STATUSER (429/5xx): raise_for_status() gjor dette om
+      til en requests.exceptions.HTTPError, som tenacity-dekoratoren over
+      fanger opp og prover pa nytt med eksponentiell backoff (maks 4 forsok,
+      2-30 sekund). Etter siste mislykkede forsok kastes feilen videre
+      (reraise=True) - den skal ALDRI sluke seg selv midt i et betalt lop.
+    - Alle andre statuser (401 feil nokkel, 422 ugyldige parametre, 404 osv.)
+      er ikke-forbigaende - a prove pa nytt vil aldri lykkes og sloser kun
+      bort tid midt i backfillen. Feiler hoyt med sys.exit(1) i stedet for a
+      returnere tomt, som er umulig a skille fra "ingen kamper i dag" (T-04-18).
+    """
+    respons = requests.get(url, params=params)
+
+    if respons.status_code == 200:
+        return respons
+
+    if respons.status_code in RETRYBARE_STATUSER:
+        respons.raise_for_status()
+
+    print(f"Feil fra The Odds API: {respons.status_code}")
+    print(respons.text)
+    sys.exit(1)  # NB: bare exit() gir exitkode 0 (=suksess) og gjemmer feilen
+
+
+def hent_live_odds(api_nokkel=None, regions=REGION, markets=MARKED, sport=SPORT):
+    """
+    Henter dagens NBA-odds fra live-endepunktet - flyttet ut av
+    04_value_detector.py (D-07), samme URL/params/konsoll-output som for.
+
+    Region/marked/oddsformat/datoformat ma ALDRI endres uavhengig av
+    hent_historisk_odds_snapshot - arkivet og live-boten ma se de samme
+    bokmakerne for at backtesten skal vaere aerlig (antagelse A4).
+    """
+    if api_nokkel is None:
+        api_nokkel = hent_api_nokkel()
+
+    url = f"{BASIS_URL}/sports/{sport}/odds/"
+    params = {
+        "apiKey": api_nokkel,
+        "regions": regions,
+        "markets": markets,
+        "oddsFormat": "decimal",
+        "dateFormat": "iso",
+    }
+
+    respons = _utfor_kall(url, params)
+    kamper = respons.json()
+    print(f"Fant {len(kamper)} NBA-kamper med odds")
+    print(f"Gjenstående API-kall denne måneden: {respons.headers.get('x-requests-remaining', 'ukjent')}")
+    return kamper
 
 
 def _parse_iso(tidspunkt):
