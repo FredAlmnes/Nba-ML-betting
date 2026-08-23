@@ -34,6 +34,21 @@
 
 ---
 
+## Endpoint correction (post-research, 2026-08-23)
+
+The phase researcher (`gsd-phase-researcher`) found that D-03's stated rationale ("per-event is 10x cheaper than sport-wide") does not match the current official Odds API docs — both endpoints share the same `10 × markets × regions` formula, but per-event charges it per game while sport-wide charges it per snapshot call. For this project's 3,638 games this reverses the comparison: per-event ≈ 72,760 credits (3.6x over the paid 20K budget, would fail), sport-wide ≈ 10-20K credits (fits). Independently re-verified against the raw official docs before surfacing to the user.
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Switch to sport-wide endpoint | Amends D-03; fits budget; matches official docs' own recommendation for featured markets (h2h/moneyline) | ✓ |
+| Keep per-event, shrink scope | Stay with per-event but cut date range or closing-line fetch to fit ~20K credits | |
+| Pause to verify independently | Wait for user to check pricing/docs themselves | |
+
+**User's choice:** "Switch to sport-wide endpoint (Recommended)"
+**Notes:** D-02 and D-03 in CONTEXT.md amended in place (dated) rather than rewritten silently, so the correction and its reasoning stay visible. `.planning/research/STACK.md`'s original per-event claim is now flagged as stale/superseded, not deleted.
+
+---
+
 ## 06_bot.py refactor shape
 
 Not asked directly — resolved by Claude per "run what's recommended," using the established Phase 2 extraction pattern (features.py/strategy.py/teams.py) as precedent: extract 04_value_detector.py/05_skadefilter.py logic into importable functions with a `__main__` guard for standalone use, imported directly by 06_bot.py, replacing the subprocess.run calls and their hardcoded python3.10 PYTHONPATH hack.
