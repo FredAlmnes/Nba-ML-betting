@@ -11,7 +11,10 @@ filen gjor et ekte nettverkskall til the-odds-api.com — det er forbeholdt
 plan 04-07 sin eksplisitt godkjente smoke-test.
 """
 
+import os
 import sqlite3
+import subprocess
+import sys
 from unittest.mock import patch
 
 import pandas as pd
@@ -751,3 +754,45 @@ def test_arkiv_beholder_data_ved_avbrudd_midt_i_lopet(mock_get, tmp_path):
     con2 = odds.apne_arkiv(sti)
     assert odds.er_allerede_arkivert(con2, "2023-01-15", "bet_time") is True
     assert odds.er_allerede_arkivert(con2, "2023-01-16", "bet_time") is False
+
+
+# ---------------------------------------------------------------------------
+# Plan 04-05, Task 2: 07_hent_historisk_odds.py sin CLI. Begge testene under
+# er tørrkjøringer (ingen --utfor gis) - ingen av dem kan naa nettverket
+# eller trenger en API-nokkel. Hoppes over pa en maskin som ikke har kjort
+# 02_feature_engineering.py enda (nba_features.csv er gitignored).
+# ---------------------------------------------------------------------------
+
+
+mangler_features_fil = not os.path.exists("nba_features.csv")
+
+
+@pytest.mark.skipif(mangler_features_fil, reason="nba_features.csv finnes ikke - kjor 02_feature_engineering.py forst")
+def test_cli_torrkjoring_uten_utfor_printer_torrkjoring(tmp_path):
+    arkiv_sti = str(tmp_path / "cli_test_arkiv.db")
+    resultat = subprocess.run(
+        [
+            sys.executable, "07_hent_historisk_odds.py",
+            "--snapshot-type", "bet_time",
+            "--maks-kreditt", "0",
+            "--datoer", "2",
+            "--arkiv", arkiv_sti,
+        ],
+        capture_output=True, text=True,
+    )
+    assert resultat.returncode == 0
+    assert "TØRRKJØRING" in resultat.stdout
+
+
+@pytest.mark.skipif(mangler_features_fil, reason="nba_features.csv finnes ikke - kjor 02_feature_engineering.py forst")
+def test_cli_uten_maks_kreditt_gir_argparse_feilkode(tmp_path):
+    arkiv_sti = str(tmp_path / "cli_test_arkiv.db")
+    resultat = subprocess.run(
+        [
+            sys.executable, "07_hent_historisk_odds.py",
+            "--snapshot-type", "bet_time",
+            "--arkiv", arkiv_sti,
+        ],
+        capture_output=True, text=True,
+    )
+    assert resultat.returncode == 2
