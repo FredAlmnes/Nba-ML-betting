@@ -436,19 +436,19 @@ params = {
 
 **If this table is empty:** N/A — see rows above.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Does the user want to switch D-03 from per-event to sport-wide, given the verified cost reversal?**
+1. **RESOLVED: Does the user want to switch D-03 from per-event to sport-wide, given the verified cost reversal?** — Yes; user confirmed the switch after seeing the verified numbers. D-03 amended in 04-CONTEXT.md (2026-08-23); every fetch-touching plan (04-01, 04-03, 04-04, 04-05, 04-07, 04-09) uses the sport-wide endpoint exclusively, with 04-04 asserting the per-event path is absent via grep.
    - What we know: Sport-wide fits the paid budget (~9,600-19,680 credits); per-event does not (~72,760 credits for the full game list).
    - What's unclear: Whether there's a non-cost reason (not captured in CONTEXT.md) for preferring per-event that would survive knowing the real cost.
    - Recommendation: Block on this before implementation — see CRITICAL FINDING.
 
-2. **How many distinct commence-time clusters exist per game date, in the real `nba_features.csv` data?**
+2. **RESOLVED-BY-DESIGN: How many distinct commence-time clusters exist per game date, in the real `nba_features.csv` data?** — Deliberately not pre-computed; plan 04-07's smoke test runs the 1-credit discovery pass against real dates and measures this empirically before the full backfill is sized, per the recommendation below.
    - What we know: 480 unique dates, avg 7.6 games/date; NBA slates typically run 2-4 distinct tip-off windows per day in the current era.
    - What's unclear: The actual distribution for this specific 2022-10-24→2025-04-13 range hasn't been computed (would require either the 1-credit discovery endpoint or an nba_api boxscore-time cross-reference, since `nba_features.csv` doesn't carry the original game start time).
    - Recommendation: Run the discovery pass (`GET historical events`, 1 credit/date) first and let its output drive the exact number of closing-line odds calls needed, rather than guessing upfront.
 
-3. **Is `eu` region's historical coverage complete back to 2022-10-24, or should the archive fall back to `us` for older dates?**
+3. **RESOLVED-BY-DESIGN: Is `eu` region's historical coverage complete back to 2022-10-24, or should the archive fall back to `us` for older dates?** — Deliberately not pre-verified; plan 04-07's smoke test spot-checks early-range dates before the full backfill, per the recommendation below.
    - What we know: Official docs state bookmaker/region historical coverage only exists "from the time they were added to the current odds API" — no specific date given for `eu`.
    - What's unclear: Whether this creates a meaningful coverage gap for this project's specific 2.5-season range.
    - Recommendation: Spot-check 2-3 early-range dates before committing to the full backfill (see Pitfall 3).
