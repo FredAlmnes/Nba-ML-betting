@@ -19,6 +19,8 @@ odds_arkiv.db
 # Bankroll og bet-historikk – personlig data
 bankroll.json
 bets.json
+bankroll.json.bak
+bets.json.bak
 
 # Dashboard (genereres automatisk)
 dashboard.html
