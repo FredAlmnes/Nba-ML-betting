@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-06-PLAN.md
-last_updated: "2026-08-24T08:21:47.904Z"
+stopped_at: Completed 04-07-PLAN.md
+last_updated: "2026-08-24T09:10:11.176Z"
 last_activity: 2026-08-24
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
   percent: 60
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 04 (historical-odds-acquisition-live-refactor) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-08-24
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -71,6 +71,7 @@ Progress: [█████████░] 86%
 | Phase 04 P03 | 4min | 2 tasks | 2 files |
 | Phase 04 P04 | 4min | 3 tasks | 4 files |
 | Phase 04 P06 | 10min | 2 tasks | 3 files |
+| Phase 04 P07 | 20min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Phase 4 Plan 04: 04_value_detector.py intentionally not modified — plan scope was odds.py/tests/test_odds.py/requirements.txt only — The live-bot rewire (D-07's other half) is a later plan's job; ODDS-01 traceability note updated to 3/9 plans (HTTP client done, backfill driver + live-bot rewire still pending)
 - [Phase ?]: [Phase 04]: Phase 4 Plan 06: gjeldende_sesong() duplication between verdi_deteksjon.py and skadefilter.py documented, not fixed — same Phase-5-consolidation treatment 04-02-SUMMARY.md and 02-05-SUMMARY.md gave equivalent findings
 - [Phase ?]: [Phase 04]: Phase 4 Plan 06: 04_value_detector.py's inline live-odds HTTP call removed entirely — finn_value_bets now sources odds via odds.hent_live_odds() (D-07); odds.py is the only module in the repo that calls requests.get against The Odds API
+- [Phase 04]: Phase 4 Plan 07: developer approved credit ceilings for the full backfill (plan 04-09): bet_time maks-kreditt=5500, closing maks-kreditt=13500, based on 04-SMOKETEST.md's measured real-API numbers — Realistic projection (4,800/10,080) and worst-case projection (4,800/14,880) were both measured from real API calls, not estimated; developer accepted realistic-case risk on closing rather than fully funding the untested worst case
+- [Phase 04]: Phase 4 Plan 07: developer accepted the eu-only early-range (2022-10) bookmaker-coverage gap as a documented data-quality caveat, declined to add a us-region fallback fetch for early dates — Smoke test measured 10-11 bookmakers/game early-range vs 17-19 late-range under eu region; adding us-region fallback would roughly double bet-time cost for early dates with no scope decision to justify it — Phase 5's backtest must treat this as a known, date-dependent boundary condition
 
 ### Pending Todos
 
@@ -134,6 +137,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24T08:21:47.897Z
-Stopped at: Completed 04-06-PLAN.md
+Last session: 2026-08-24T09:10:11.168Z
+Stopped at: Completed 04-07-PLAN.md
 Resume file: None
