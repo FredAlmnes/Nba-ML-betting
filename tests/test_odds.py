@@ -260,6 +260,48 @@ def test_kamp_utenfor_forespurt_dato_droppes_ikke_ombenevnes():
     assert all(rad[event_id_kolonne] == "evt-riktig" for rad in rader)
 
 
+def test_closing_snapshot_etter_avspark_droppes_helt():
+    # snapshot-ets egen timestamp (12:55:33) er ETTER kampens commence_time
+    # (00:30 SAMME dag som forespurt, altså lenge før) -- her konstrueres
+    # det motsatte: en kamp som starter FØR snapshot-et ble tatt.
+    kamp = _kamp(commence_time="2023-01-15T12:00:00Z")
+    snapshot = _snapshot([kamp], timestamp="2023-01-15T12:55:33Z")
+
+    rader = odds.parse_snapshot_til_rader(snapshot, "2023-01-15", "closing", hentet_tidspunkt="2026-08-23T12:00:00")
+
+    assert rader == [], "closing-snapshot tatt etter avspark skal aldri arkiveres (Pitfall 6 / T-04-44)"
+
+
+def test_closing_snapshot_nøyaktig_ved_avspark_droppes_ogsaa():
+    kamp = _kamp(commence_time="2023-01-15T12:55:33Z")
+    snapshot = _snapshot([kamp], timestamp="2023-01-15T12:55:33Z")
+
+    rader = odds.parse_snapshot_til_rader(snapshot, "2023-01-15", "closing", hentet_tidspunkt="2026-08-23T12:00:00")
+
+    assert rader == [], "et snapshot nøyaktig ved avspark er ikke lenger en 'closing'-linje"
+
+
+def test_bet_time_snapshot_etter_avspark_arkiveres_fortsatt():
+    # Samme tidsstempel-situasjon, men bet_time rammes IKKE av sjekken --
+    # bet_time spørres alltid kl 13:00 UTC samme kampdag, lenge før avspark,
+    # så dette scenarioet er kunstig, men beviser at sjekken er type-spesifikk.
+    kamp = _kamp(commence_time="2023-01-15T12:00:00Z")
+    snapshot = _snapshot([kamp], timestamp="2023-01-15T12:55:33Z")
+
+    rader = odds.parse_snapshot_til_rader(snapshot, "2023-01-15", "bet_time", hentet_tidspunkt="2026-08-23T12:00:00")
+
+    assert len(rader) == 2
+
+
+def test_closing_snapshot_foer_avspark_arkiveres_normalt():
+    kamp = _kamp(commence_time="2023-01-15T13:30:00Z")
+    snapshot = _snapshot([kamp], timestamp="2023-01-15T12:55:33Z")
+
+    rader = odds.parse_snapshot_til_rader(snapshot, "2023-01-15", "closing", hentet_tidspunkt="2026-08-23T12:00:00")
+
+    assert len(rader) == 2
+
+
 def test_bookmaker_med_kun_spreads_gir_null_rader():
     kamp = _kamp(
         bookmakers=[
@@ -662,11 +704,11 @@ def test_closing_lager_en_discovery_og_to_klynge_kall_kronologisk(mock_get):
         {"id": "evt-c", "home_team": "Golden State Warriors", "away_team": "LA Clippers",
          "commence_time": "2023-01-16T03:00:00Z"},
         {"id": "evt-a", "home_team": "Boston Celtics", "away_team": "Miami Heat",
-         "commence_time": "2023-01-16T00:00:00Z"},
+         "commence_time": "2023-01-16T00:20:00Z"},
         {"id": "evt-b", "home_team": "Toronto Raptors", "away_team": "Chicago Bulls",
          "commence_time": "2023-01-16T00:30:00Z"},
     ]
-    kamp_a = _kamp(event_id="evt-a", commence_time="2023-01-16T00:00:00Z",
+    kamp_a = _kamp(event_id="evt-a", commence_time="2023-01-16T00:20:00Z",
                     home_team="Boston Celtics", away_team="Miami Heat")
     kamp_b = _kamp(event_id="evt-b", commence_time="2023-01-16T00:30:00Z",
                     home_team="Toronto Raptors", away_team="Chicago Bulls")

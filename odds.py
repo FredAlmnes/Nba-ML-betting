@@ -458,6 +458,18 @@ def parse_snapshot_til_rader(snapshot, kamp_dato, snapshot_type, hentet_tidspunk
     (ARCHITECTURE.md Pitfall #6: et snapshot tatt for dato D er kun
     aerlig bevis om dato D sine kamper).
 
+    For `snapshot_type="closing"` droppes i tillegg enhver kamp der selve
+    snapshot-ets egen `timestamp` er PÅ ELLER ETTER kampens `commence_time`
+    — API-ets historiske granularitet er ikke garantert fin nok til at det
+    finnes et snapshot nøyaktig ved det forespurte lukketidspunktet
+    (`lukketidspunkt` i kjor_backfill), og når det ikke gjør det returnerer
+    API-et det nærmeste TILGJENGELIGE snapshotet, som i sjeldne tilfeller
+    kan ligge etter avspark. Å arkivere en slik rad som "closing" ville
+    stille erstatte en ekte pre-kamp-linje med en live/etter-avspark-pris —
+    nøyaktig det ARCHITECTURE.md Pitfall #6 og T-04-44 forbyr. Rammes kun
+    "closing" av dette; "bet_time" spørres alltid kl. 13:00 UTC samme
+    kampdag, lenge før noen avspark, så samme fare finnes ikke der.
+
     Lag som teams.finn_lag_id() ikke kan lose beholder likevel raden sin,
     med None i *_lag_id-kolonnen og det rå navnet bevart — å droppe kampen
     stille ville skapt et usynlig hull i arkivet (T-04-14).
@@ -479,6 +491,9 @@ def parse_snapshot_til_rader(snapshot, kamp_dato, snapshot_type, hentet_tidspunk
 
         spill_dato = kamp_dato_fra_commence(kamp["commence_time"])
         if spill_dato != kamp_dato:
+            continue
+
+        if snapshot_type == "closing" and _parse_iso(snapshot_timestamp) >= _parse_iso(kamp["commence_time"]):
             continue
 
         hjemme_navn = kamp["home_team"]
