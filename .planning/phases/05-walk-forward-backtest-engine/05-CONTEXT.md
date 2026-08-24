@@ -42,7 +42,14 @@ This phase builds the backtest engine that is the project's actual Core Value de
 - Exact internal function names and module-level organization within `backtest.py`, `metrics.py`, and `model.py` (Norwegian, snake_case, per established convention).
 - Exact bootstrap implementation details (resample count beyond the 1,000 default, RNG seeding for reproducibility — should be seeded so re-running the same manifest config reproduces the same CI).
 - Whether `08_kjor_backtest.py` takes CLI flags for date range / Kelly fraction overrides, or is edited-and-rerun like the other numbered scripts — planner's call, but must remain resumable/cheap to iterate on the train/calibrate slice per the "predict once, simulate many" cost-management guidance in `.planning/research/ARCHITECTURE.md`.
-- Exact injury-filter as-of adaptation: `skadefilter.py`'s "last 3 games" logic must become as-of-aware (relative to the simulated date, not real "today") per `.planning/research/ARCHITECTURE.md` pitfall #5 — planner determines the specific function signature change.
+
+### Post-Research Resolution (2026-08-24 — resolved autonomously, see 05-RESEARCH.md)
+
+`05-RESEARCH.md` found this phase's original injury-filter assumption was wrong and raised 3 open questions. Resolved here so the planner does not need to re-litigate:
+
+1. **Injury-filter backtest IS in scope.** Research confirmed `nba_kamper_raw.csv`/`nba_features.csv` are team-level only (no player IDs/minutes), so `05_skadefilter.py`'s live "top-3 minutes players present in last 3 games" logic cannot be made as-of-aware from existing data alone — it needs a new `nba_spillerlogg_raw.csv` (player-game-log) data source. Research verified live that `nba_api`'s `leaguegamelog.LeagueGameLog(player_or_team_abbreviation='P', season=...)` returns a full season of player-game-log rows in one free call (same pattern `01_hent_data.py` already uses for team logs; no Odds-API credit cost). **Decision: build this data acquisition + an as-of-aware `skadefilter.py` adaptation as part of this phase**, rather than disabling the injury filter in the backtest — BT-01 explicitly lists the injury filter as part of the replayed decision pipeline, and this project's Core Value is validating the *actual* live strategy, not a stripped-down approximation of it. Disabling it would silently bias every backtest ROI number in an unknown direction (games where a key player was actually out would be scored as if they weren't).
+2. **`HOLDOUT_START_DATO = "2024-10-01"`** — confirmed as the exact constant value (matches the "full 2024-25 season" holdout definition above; research independently verified 1,225 games fall on/after this date in `nba_features.csv`).
+3. **Early walk-forward months (small sample) are included, not excluded**, with the bootstrap/Wilson CIs communicating the uncertainty rather than dropping data — avoids any appearance of cherry-picking the backtest window, and `features.py`'s existing `min_periods=3` already naturally limits how few games contribute to an early rolling-average anyway.
 
 </decisions>
 
