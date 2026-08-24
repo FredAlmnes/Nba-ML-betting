@@ -143,7 +143,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 04-05-PLAN.md — Backfill-driver: kjor_backfill + 07_hent_historisk_odds.py (tørrkjøring som standard, obligatorisk --maks-kreditt)
+- [x] 04-05-PLAN.md — Backfill-driver: kjor_backfill + 07_hent_historisk_odds.py (tørrkjøring som standard, obligatorisk --maks-kreditt)
 - [ ] 04-06-PLAN.md — ODDS-02: verdi_deteksjon.py ekstrahert, 04_value_detector.py blir tynn CLI-wrapper, live-odds hentes fra odds.py
 
 **Wave 5** *(blocked on Wave 4)*
