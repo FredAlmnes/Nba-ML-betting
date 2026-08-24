@@ -144,7 +144,7 @@ Plans:
 **Wave 4** *(blocked on Wave 3)*
 
 - [x] 04-05-PLAN.md — Backfill-driver: kjor_backfill + 07_hent_historisk_odds.py (tørrkjøring som standard, obligatorisk --maks-kreditt)
-- [ ] 04-06-PLAN.md — ODDS-02: verdi_deteksjon.py ekstrahert, 04_value_detector.py blir tynn CLI-wrapper, live-odds hentes fra odds.py
+- [x] 04-06-PLAN.md — ODDS-02: verdi_deteksjon.py ekstrahert, 04_value_detector.py blir tynn CLI-wrapper, live-odds hentes fra odds.py
 
 **Wave 5** *(blocked on Wave 4)*
 
@@ -180,5 +180,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
-| 4. Historical Odds Acquisition & Live Refactor | 4/9 | In Progress|  |
+| 4. Historical Odds Acquisition & Live Refactor | 6/9 | In Progress|  |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |

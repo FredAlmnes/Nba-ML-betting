@@ -28,7 +28,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Historical Odds & Live Refactor
 
 - [ ] **ODDS-01**: Historical odds are fetched via The Odds API's sport-wide historical endpoint (`/v4/historical/sports/{sport}/odds`), one call per unique game date, and archived permanently in SQLite, so re-running/iterating on the backtest costs no further API credits (endpoint amended 2026-08-23 per Phase 4 D-03 — both endpoints cost 10 x markets x regions, but per-event charges per game queried; sport-wide charges once per snapshot). Persistence layer (`odds.py`'s SQLite archive) done in 04-01; timestamp/date logic and the offline snapshot-to-row parser (`parse_snapshot_til_rader`) done in 04-03; the HTTP client (`hent_live_odds`, `hent_historisk_odds_snapshot`, `hent_historiske_events`, retrying `_utfor_kall`, credit-safe by construction) done in 04-04, still zero real API calls made (every test mocked) and `04_value_detector.py` not yet rewired to call the shared function; the resumable, credit-ceiling-enforced backfill driver (`kjor_backfill`) and its dry-run-by-default CLI (`07_hent_historisk_odds.py`) done in 04-05, still zero real API calls made — the actual paid smoke test and full backfill land in 04-07 and 04-09, and `04_value_detector.py`'s live-bot rewire still lands in 04-06/04-08.
-- [ ] **ODDS-02**: `06_bot.py` imports the shared core directly instead of invoking `04_value_detector.py`/`05_skadefilter.py` as subprocesses. Injury-filter half (`skadefilter.py`, importable with zero import-time network calls) done in 04-02; `04_value_detector.py`'s equivalent extraction lands in 04-06, and `06_bot.py`'s actual in-process wiring lands in 04-08.
+- [ ] **ODDS-02**: `06_bot.py` imports the shared core directly instead of invoking `04_value_detector.py`/`05_skadefilter.py` as subprocesses. Injury-filter half (`skadefilter.py`, importable with zero import-time network calls) done in 04-02; value-detector half (`verdi_deteksjon.py`, importable, live odds sourced from `odds.hent_live_odds`, zero import-time side effects) done in 04-06; `06_bot.py`'s actual in-process wiring (subprocess/`python3.10`-`PYTHONPATH` removal) still lands in 04-08.
 
 ### Backtest Engine (the core deliverable)
 
@@ -82,7 +82,7 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 | CALIB-01 | Phase 3 | Complete |
 | CALIB-02 | Phase 3 | Complete |
 | ODDS-01 | Phase 4 | In Progress (4/9 plans — persistence + timestamp/parsing + HTTP client + resumable credit-ceiling backfill driver/dry-run CLI, no real API calls made yet, live-bot rewire still pending) |
-| ODDS-02 | Phase 4 | In Progress (2/9 plans — injury-filter extraction only) |
+| ODDS-02 | Phase 4 | In Progress (2/9 plans — skadefilter.py (04-02) + verdi_deteksjon.py (04-06) extracted as importable modules; 06_bot.py's in-process wiring still pending, lands in 04-08) |
 | BT-01 | Phase 5 | Pending |
 | BT-02 | Phase 5 | Pending |
 | BT-03 | Phase 5 | Pending |
