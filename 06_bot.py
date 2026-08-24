@@ -19,12 +19,13 @@ Bankroll og historikk lagres i:
 
 import json
 import os
-import subprocess
-import sys
 from datetime import datetime, date, timedelta
 import pandas as pd
 import time
 from nba_api.stats.endpoints import leaguegamefinder
+import odds
+import skadefilter
+import verdi_deteksjon
 from teams import finn_lag
 from config import KELLY_FRAKSJON, MAX_INNSATS, MIN_INNSATS, STARTKAPITAL
 from strategy import beregn_innsats, finn_bet_nokkel, bygg_bet_nokler, er_duplikat
@@ -191,30 +192,49 @@ def sjekk_resultater(bets, bankroll_data):
 # -------------------------------------------------------
 
 def kjør_pipeline():
-    """Kjører 04 og 05 for å få dagens value bets med skadefilter."""
-    print("Kjører value detector...")
-    env = os.environ.copy()
-    venv_site = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "lib", "python3.10", "site-packages")
-    env["PYTHONPATH"] = venv_site + os.pathsep + env.get("PYTHONPATH", "")
-    result = subprocess.run([sys.executable, "04_value_detector.py"],
-                            capture_output=True, text=True, env=env)
-    if result.returncode != 0:
-        print(f"  Feil i 04_value_detector.py:\n{result.stderr[-500:]}")
-        return None
+    """
+    Kjører value-deteksjon og skadefilter i prosess (direkte funksjonskall mot
+    odds.py/verdi_deteksjon.py/skadefilter.py) for å få dagens value bets med
+    skadefilter.
 
-    print("Kjører skadefilter...")
-    result = subprocess.run([sys.executable, "05_skadefilter.py"],
-                            capture_output=True, text=True, env=env)
-    if result.returncode != 0:
-        print(f"  Feil i 05_skadefilter.py:\n{result.stderr[-500:]}")
-        return None
+    Tidligere kjørte denne funksjonen 04_value_detector.py og 05_skadefilter.py
+    som to separate underprosesser (via Python sin standard prosess-kjøre-
+    funksjon). Den prosessgrensen var, ved et uhell, også botens eneste
+    krasjbarriere — en feil i pipelinen kom tilbake som fanget stderr-tekst
+    og boten fortsatte. Nå som grensen er borte, MÅ den erstattes eksplisitt
+    (se except-blokken under), ellers krasjer et enkelt API-/nettverksproblem
+    hele boten før dagens bankroll/bets rekker å bli lagret.
+    """
+    try:
+        print("Kjører value detector...")
+        api_nokkel = odds.hent_api_nokkel()
+        modell, feature_kolonner = verdi_deteksjon.last_modell()
+        value_bets = verdi_deteksjon.finn_value_bets(modell, feature_kolonner, api_nokkel=api_nokkel)
+        # Skriv alltid CSV-en, selv om value_bets er tom – 05/skadefilter.py sin
+        # standalone-kjøring og operatørens daglige revisjonsspor forventer
+        # begge en fersk fil (se 2026-08-19-bug-kommentaren i verdi_deteksjon.py).
+        verdi_deteksjon.skriv_value_bets_csv(value_bets)
 
-    if not os.path.exists("value_bets_med_skadefilter.csv"):
-        return None
+        if not value_bets:
+            return None
 
-    df = pd.read_csv("value_bets_med_skadefilter.csv")
-    ok = df[df["Skadestatus"].str.contains("OK")]
-    return ok if not ok.empty else None
+        print("Kjører skadefilter...")
+        value_df = pd.DataFrame(value_bets)
+        resultat_df = skadefilter.filtrer_bets_for_skader(value_df)
+        skadefilter.skriv_skadefilter_csv(resultat_df)
+
+        ok = resultat_df[resultat_df["Skadestatus"].str.contains("OK")]
+        return ok if not ok.empty else None
+    except (Exception, SystemExit) as e:
+        # SystemExit-halvdelen er IKKE valgfri: odds.hent_api_nokkel() og
+        # odds._utfor_kall() kaller begge sys.exit(1) ved feil (riktig for et
+        # frittstående script, men ville nå drept hele boten midt i kjøringen,
+        # før sjekk_resultater sine oppgjorte bets og oppdaterte bankroll er
+        # lagret). En bar 'except Exception' fanger IKKE SystemExit, siden den
+        # arver fra BaseException. Subprocess-grensen pleide å sluke dette;
+        # den grensen er nå borte, så vi må gjøre det eksplisitt her.
+        print(f"  Feil i value-pipelinen: {e}")
+        return None
 
 
 def plasser_bets(value_bets_df, bets, bankroll_data):

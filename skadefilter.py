@@ -4,7 +4,8 @@ Delt modul for skadefilter-beslutningslogikk.
 Erstatter den gamle 05_skadefilter.py, som utførte alt — inkludert fire
 nba_api-nettverkskall og en `print(f"Bruker sesong: {SESONG}")` — på
 modul-nivå ved import. Det gjorde filen umulig å importere trygt fra
-06_bot.py (som derfor måtte kjøre den som en subprocess i stedet).
+06_bot.py (som derfor måtte kjøre den som en egen underprosess i stedet —
+se plan 04-08, som fjerner dette).
 
 Denne modulen gjør ingen nettverkskall bare ved `import skadefilter` — alle
 nba_api-kall skjer inne i funksjoner, og kalles først når noen faktisk ber

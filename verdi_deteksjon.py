@@ -5,7 +5,7 @@ Erstatter den gamle 04_value_detector.py, som utførte alt — lasting av
 pickle-modellen, et nettverkskall mot The Odds API, henting av fersk
 lagstatistikk fra nba_api og en CSV-skriving — på modul-nivå ved import.
 Det gjorde filen umulig å importere trygt fra 06_bot.py (som derfor måtte
-kjøre den som en subprocess i stedet).
+kjøre den som en egen underprosess i stedet — se plan 04-08, som fjerner dette).
 
 Denne modulen gjør ingen nettverkskall, laster ingen pickle og skriver ingen
 fil bare ved `import verdi_deteksjon` — alt skjer inne i funksjoner. Live-
