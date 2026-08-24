@@ -149,7 +149,7 @@ Plans:
 **Wave 5** *(blocked on Wave 4)*
 
 - [x] 04-07-PLAN.md — Røyktest mot ekte API (maks 130 kreditter): mål kostnad, klynger, dekning, gratis gjenkjøring — deretter blokkerende godkjenning
-- [ ] 04-08-PLAN.md — ODDS-02: 06_bot.py importerer direkte, subprocess og python3.10-PYTHONPATH fjernes, krasjbarriere gjenopprettet
+- [x] 04-08-PLAN.md — ODDS-02: 06_bot.py importerer direkte, subprocess og python3.10-PYTHONPATH fjernes, krasjbarriere gjenopprettet
 
 **Wave 6** *(blocked on Wave 5)*
 
@@ -180,5 +180,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 1. Repo Hygiene & Config Remediation | 5/5 | Complete    | 2026-08-20 |
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
-| 4. Historical Odds Acquisition & Live Refactor | 7/9 | In Progress|  |
+| 4. Historical Odds Acquisition & Live Refactor | 8/9 | In Progress|  |
 | 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |
