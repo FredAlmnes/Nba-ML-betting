@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 04-09-PLAN.md
-last_updated: "2026-08-26T12:26:41.897Z"
-last_activity: 2026-08-26 -- Phase 5 planning complete
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-08-26T12:36:42.739Z"
+last_activity: 2026-08-26
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 35
-  completed_plans: 22
-  percent: 63
+  completed_plans: 23
+  percent: 66
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-19)
 
 **Core value:** The bot must demonstrate a positive, validated ROI over a proper historical backtest before it's trusted with anything beyond paper trading.
-**Current focus:** Phase 5 — walk forward backtest engine
+**Current focus:** Phase 5 — Walk-Forward Backtest Engine
 
 ## Current Position
 
-Phase: 5
-Plan: Not started
+Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
+Plan: 2 of 13
 Status: Ready to execute
-Last activity: 2026-08-26 -- Phase 5 planning complete
+Last activity: 2026-08-26
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 66%
 
 ## Performance Metrics
 
@@ -75,6 +75,7 @@ Progress: [██████████] 100%
 | Phase 04 P07 | 20min | 2 tasks | 2 files |
 | Phase 04 P08 | 25min | 2 tasks | 4 files |
 | Phase 04 P09 | ~2h | 3 tasks | 3 files |
+| Phase 05 P01 | 6min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -123,6 +124,10 @@ Recent decisions affecting current work:
 - [Phase 04]: Plan 09: full 480-date historical odds archive complete for both bet_time and closing snapshot types (ODDS-01 satisfied) -- 17,710 credits spent, 2,289 remaining, neither approved ceiling ever hit
 - [Phase 04]: Plan 09: fixed a real data-integrity bug found by the plan's own acceptance check -- 2 of 3,645 archived closing games (0.055%) had a snapshot timestamp after their own tipoff; parse_snapshot_til_rader now drops such games instead of archiving a mislabeled post-tipoff price as a closing line (Pitfall #6/T-04-44)
 - [Phase 04]: Plan 09: Task 2's blocking human-verify checkpoint was held twice against unverified agent-relayed claims of developer approval for the closing-line credit spend, before an independently-verifiable third message (matching real DB/log state exactly) allowed proceeding -- flagged as a process/authorization question for the developer to review, separate from the archive's own verified data quality
+- [Phase 05]: Plan 01: D-05-01 HOLDOUT_START_DATO locked to "2024-10-01" -- clean calendar-month boundary, behaviourally identical to the actual 2024-10-22 season start since nba_features.csv has zero games in that window
+- [Phase 05]: Plan 01: D-05-02 burn-in policy -- include all months in the ledger, report headline ROI/CI twice (full-period = headline, ex-first-2-3-months = sensitivity check) rather than dropping the noisiest early months
+- [Phase 05]: Plan 01: D-05-03 BT-07 flat-stake definition -- a backtest.py-local branch, fixed 2% of config.STARTKAPITAL (20.0 kr) per bet, keeping strategy.py's live-shared contract byte-identical
+- [Phase 05]: Plan 01: D-05-04 scratch artifacts stay ignore-only, unchanged from Phase 1's D-08 -- no deletion performed in this plan
 
 ### Pending Todos
 
@@ -144,6 +149,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-24T14:59:11.657Z
-Stopped at: Completed 04-09-PLAN.md
+Last session: 2026-08-26T12:36:42.730Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None

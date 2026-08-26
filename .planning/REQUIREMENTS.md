@@ -34,7 +34,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **BT-01**: A walk-forward, chronological replay simulates the full decision pipeline (model score → value threshold → odds filter → injury filter → half-Kelly stake) against historical odds, using existing 2022-23 through 2024-25 data plus the historical odds endpoint
 - [ ] **BT-02**: All data pulled into the replay (odds, injury status, rolling stats) is filtered to "known as of date D" — no post-decision-time information anywhere in the loop
-- [ ] **BT-03**: A locked, never-touched final holdout slice exists and is checked exactly once, after all threshold/parameter decisions are frozen on the train/calibrate data
+- [x] **BT-03**: A locked, never-touched final holdout slice exists and is checked exactly once, after all threshold/parameter decisions are frozen on the train/calibrate data
 - [ ] **BT-04**: ROI, win rate, and max drawdown are reported on the flagged-bet subset only, with bet count and a confidence interval attached to every headline number
 - [ ] **BT-05**: Each backtest run produces a reproducible, versioned run manifest (config + date range + metrics), enabling a clear before/after comparison against the current losing live configuration
 - [ ] **BT-06**: Closing Line Value (CLV) is tracked per bet and in aggregate, as a faster-converging signal of genuine edge than raw ROI
@@ -85,7 +85,7 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 | ODDS-02 | Phase 4 | Complete |
 | BT-01 | Phase 5 | Pending |
 | BT-02 | Phase 5 | Pending |
-| BT-03 | Phase 5 | Pending |
+| BT-03 | Phase 5 | Complete |
 | BT-04 | Phase 5 | Pending |
 | BT-05 | Phase 5 | Pending |
 | BT-06 | Phase 5 | Pending |

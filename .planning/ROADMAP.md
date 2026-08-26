@@ -174,7 +174,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Pre-flight-port: HOLDOUT_START_DATO, innbrenningspolitikk og flat-innsats-definisjon låses (checkpoints) + config.py/.gitignore
+- [x] 05-01-PLAN.md — Pre-flight-port: HOLDOUT_START_DATO, innbrenningspolitikk og flat-innsats-definisjon låses (checkpoints) + config.py/.gitignore
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -226,4 +226,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 9/9 | Complete   | 2026-08-24 |
-| 5. Walk-Forward Backtest Engine | 0/13 | Not started | - |
+| 5. Walk-Forward Backtest Engine | 1/13 | In Progress|  |
