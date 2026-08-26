@@ -28,6 +28,12 @@ def test_config_values():
     # terskelendring (0.20/2.50) som forble udokumentert live i lang tid.
     # Denne testen er en bevisst snubletråd — en endring her må skje sammen
     # med en bevisst endring av testen, ikke som en stille sideeffekt.
+    #
+    # HOLDOUT_START_DATO-assertionen under er en snubletråd av samme type:
+    # BT-03 krever at holdout-grensen håndheves av koden, ikke bare av
+    # konvensjon, så en stille endring av konstanten ville stille flyttet
+    # grensen. Enhver endring må derfor skje sammen med en bevisst endring
+    # av denne testen, akkurat som de syv verdiene over.
     assert config.MIN_VALUE_TERSKEL == 0.05
     assert config.MIN_ODDS == 1.50
     assert config.MAX_ODDS == 4.00
@@ -35,6 +41,7 @@ def test_config_values():
     assert config.MAX_INNSATS == 150.0
     assert config.MIN_INNSATS == 20.0
     assert config.STARTKAPITAL == 1000.0
+    assert config.HOLDOUT_START_DATO == "2024-10-01"
 
 
 def test_config_har_ingen_hemmeligheter():
