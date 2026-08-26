@@ -22,6 +22,14 @@ bets.json
 bankroll.json.bak
 bets.json.bak
 
+# Backtest-kjøringer og spillerlogg – backtests/ er simulert kjøreoutput
+# (manifest.json, ledger.csv, kelly_sweep.json) som aldri må forveksles med
+# eller blandes med den ekte papir-trading-tilstanden i
+# bankroll.json/bets.json; nba_spillerlogg_raw.csv er et stort,
+# regenererbart nba_api-artefakt av samme type som nba_kamper_raw.csv
+backtests/
+nba_spillerlogg_raw.csv
+
 # Dashboard (genereres automatisk)
 dashboard.html
 dashboard_tom.html
