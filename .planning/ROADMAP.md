@@ -168,7 +168,52 @@ Plans:
   4. A backtest run produces a reproducible, versioned run manifest (config + date range + ROI + win rate + max drawdown + bet count + confidence interval), enabling a clear before/after comparison against the current losing live configuration
   5. Closing Line Value (CLV) is reported per bet and in aggregate, and a Kelly-fraction sensitivity sweep (flat/quarter/half/full) shows how sensitive reported ROI is to the staking assumption
 
-**Plans**: TBD
+**Plans**: 13 plans
+
+Plans:
+
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Pre-flight-port: HOLDOUT_START_DATO, innbrenningspolitikk og flat-innsats-definisjon låses (checkpoints) + config.py/.gitignore
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 05-02-PLAN.md — model.py: as_of-bevisst tren/kalibrer/lagre/last trukket ut av 03_tren_modell.py + tests/test_model.py
+- [ ] 05-03-PLAN.md — metrics.py: ROI, vinnrate, maks drawdown, bootstrap-KI, Wilson-KI og CLV + tests/test_metrics.py
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 05-04-PLAN.md — odds.py: beste-pris-per-utfall for bet_time og closing, delt med verdi_deteksjon.py
+- [ ] 05-05-PLAN.md — spillerlogg.py + nba_spillerlogg_raw.csv: spillerkamplogger 2022-23..2024-25 via gratis nba_api
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 05-06-PLAN.md — skadefilter.py: sesong_grenser_for_dato + sjekk_lag_helse_som_of (as-of skadefilter)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 05-07-PLAN.md — backtest.py: prediksjonspass, HoldoutLaastFeil og den strukturelle holdout-vakten
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 05-08-PLAN.md — backtest.py: simuleringspass, ledger.csv og manifest.json per kjøring
+
+**Wave 7** *(blocked on Wave 6)*
+
+- [ ] 05-09-PLAN.md — Kelly-sensitivitetssweep (flat/kvart/halv/full) mot cachede prediksjoner
+
+**Wave 8** *(blocked on Wave 7)*
+
+- [ ] 05-10-PLAN.md — 08_kjor_backtest.py: CLI med ISO-datovalidering og to-flagget holdout-vei + KOMME_I_GANG.md
+- [ ] 05-11-PLAN.md — tests/test_parity.py: live-vs-backtest beslutningsparitet + full suite-port
+
+**Wave 9** *(blocked on Wave 8)*
+
+- [ ] 05-12-PLAN.md — Fryse-kjøring: full tuning-slice med sweep, blokkerende godkjenning, 05-FROSNE-BESLUTNINGER.md
+
+**Wave 10** *(blocked on Wave 9)*
+
+- [ ] 05-13-PLAN.md — Holdouten brukes én gang: blokkerende port, én kjøring mot 2024-25, før/etter mot dagens tapende oppsett
 
 ## Progress
 
@@ -181,4 +226,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 9/9 | Complete   | 2026-08-24 |
-| 5. Walk-Forward Backtest Engine | 0/TBD | Not started | - |
+| 5. Walk-Forward Backtest Engine | 0/13 | Not started | - |
