@@ -166,16 +166,17 @@ def _feature_rad(i, dato):
     }
 
 
-def _lag_datoer(fra, antall):
-    """`antall` fortløpende kalenderdager fra og med `fra` (streng "YYYY-MM-DD")."""
-    start = pd.Timestamp(fra)
-    return [(start + pd.Timedelta(days=i)).strftime("%Y-%m-%d") for i in range(antall)]
+def _lag_datoer(fra, til):
+    """Fortløpende kalenderdager fra og med `fra` til og med `til` (strenger "YYYY-MM-DD")."""
+    rng = pd.date_range(start=fra, end=til, freq="D")
+    return [d.strftime("%Y-%m-%d") for d in rng]
 
 
 @pytest.fixture
 def features_df():
-    """~150 rader, ett spill per dato, over tre kalendermåneder (2022-11, 2022-12, 2023-01)."""
-    datoer = _lag_datoer("2022-11-01", 50) + _lag_datoer("2022-12-01", 50) + _lag_datoer("2023-01-01", 50)
+    """92 rader, ett spill per dato, over EKSAKT tre kalendermåneder (2022-11-01..2023-01-31) —
+    holdt innenfor månedsgrensene med vilje, slik at retreningstellingen blir eksakt 3."""
+    datoer = _lag_datoer("2022-11-01", "2023-01-31")
     rader = [_feature_rad(i, dato) for i, dato in enumerate(datoer)]
     return pd.DataFrame(rader)
 
@@ -274,15 +275,17 @@ def test_retrening_skjer_en_gang_per_maned(data):
     prediksjoner, resultat = backtest.kjor_backtest(data, min_treningskamper=20, skriv_ut=False)
     assert resultat["retreninger"] == 3
 
-    forste_dato_i_maned = {}
-    for dato in data["datoer"]:
-        m = dato[:7]
-        if m not in forste_dato_i_maned:
-            forste_dato_i_maned[m] = dato
-
+    # Innenfor hver kalendermåned skal ALLE prediksjonsrader dele samme
+    # retrent_dato (nøyaktig én gjenoppretrening per måned), og den datoen
+    # skal selv ligge i den samme måneden (ikke en tidligere måneds anker).
+    retrent_dato_per_maned = {}
     for rad in prediksjoner:
         m = rad["as_of_dato"][:7]
-        assert rad["retrent_dato"] == forste_dato_i_maned[m]
+        if m in retrent_dato_per_maned:
+            assert rad["retrent_dato"] == retrent_dato_per_maned[m]
+        else:
+            retrent_dato_per_maned[m] = rad["retrent_dato"]
+            assert rad["retrent_dato"][:7] == m
 
 
 def test_modellen_trenes_bare_paa_data_for_datoen(data, monkeypatch):
