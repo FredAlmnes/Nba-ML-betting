@@ -1,13 +1,20 @@
 """
-Tester for backtest.py — Fase 5s walk-forward-motor (plan 05-07).
+Tester for backtest.py — Fase 5s walk-forward-motor (plan 05-07), dens
+simulerings-/manifest-lag (plan 05-08) og dens Kelly-sweep (plan 05-09).
 
 Hver test i denne filen er deterministisk — ingen systemklokke, ingen
-nettverk, ingen `random` — og (bortsett fra de tre eksplisitt
-skip-vaktede ekte-data-testene plan 05-07 Task 3 legger til) ingen
-avhengighet av den ekte `odds_arkiv.db` eller `nba_features.csv`, som
-speiler `tests/test_parity.py` sin egen docstring-disiplin.
+nettverk, ingen `random` — og (bortsett fra de eksplisitt skip-vaktede
+ekte-data-testene plan 05-07 Task 3, plan 05-08 Task 3 og plan 05-09
+Task 3 legger til) ingen avhengighet av den ekte `odds_arkiv.db` eller
+`nba_features.csv`, som speiler `tests/test_parity.py` sin egen
+docstring-disiplin. `kjor_kelly_sweep` sin determinisme (samme
+prediksjonsliste + samme injiserte `opprettet` gir to like sweep-dicter)
+er dekket av `test_kelly_sweep_er_deterministisk`, samme disiplin som
+`test_simuler_bets_er_deterministisk` allerede håndhever for
+simuleringspasset.
 """
 
+import copy
 import datetime
 import inspect
 import json
@@ -1117,3 +1124,205 @@ def test_ekte_ledger_regnskapet_gaar_opp(tmp_path):
 
     sum_gevinst = sum(rad["gevinst"] for rad in ledger)
     assert sum_gevinst == pytest.approx(m["sum_profitt"], abs=0.01)
+
+
+# --- 7. Kelly-sweep: samme prediksjoner, ulik innsats (plan 05-09) ---
+
+
+def test_kelly_sweep_bruker_cachet_prediksjoner(monkeypatch):
+    def _sprakk(*args, **kwargs):
+        raise AssertionError("sweepen skal aldri kjøre walk-forward-løkken på nytt")
+
+    monkeypatch.setattr(backtest, "kjor_backtest", _sprakk)
+    monkeypatch.setattr(backtest, "klargjor_backtestdata", _sprakk)
+    monkeypatch.setattr(model, "tren", _sprakk)
+
+    preds = [lag_prediksjon(hjemme_vant=1)]
+    sweep = backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+    assert len(sweep["armer"]) == 4
+
+
+def test_kelly_sweep_har_fire_armer_i_laast_rekkefolge():
+    preds = [lag_prediksjon(hjemme_vant=1)]
+    sweep = backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+    assert [a["etikett"] for a in sweep["armer"]] == ["flat", "kvart", "halv", "full"]
+    assert [a["kelly_fraksjon"] for a in sweep["armer"]] == [None, 0.25, 0.5, 1.0]
+
+
+def test_ingen_arm_bruker_kellyfraksjon_null():
+    preds = [lag_prediksjon(hjemme_vant=1)]
+    sweep = backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+    fraksjoner = [a["kelly_fraksjon"] for a in sweep["armer"]]
+    assert 0 not in fraksjoner
+    assert 0.0 not in fraksjoner
+
+
+def test_live_kellyfraksjon_er_med_i_sweepen():
+    preds = [lag_prediksjon(hjemme_vant=1)]
+    sweep = backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+    fraksjoner = [a["kelly_fraksjon"] for a in sweep["armer"]]
+    assert config.KELLY_FRAKSJON in fraksjoner
+
+
+def test_basis_armen_reproduserer_simuler_bets():
+    preds = [
+        lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                        bet="Hjemme (A)", side="hjemme", hjemme_vant=1),
+        lag_prediksjon(kamp_dato="2022-11-11", game_id="2", kamp="C vs D",
+                        bet="Hjemme (C)", side="hjemme", odds=1.8, modell_prob=0.6,
+                        hjemme_vant=0),
+    ]
+    sweep = backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+    basis = [a for a in sweep["armer"] if a["etikett"] == sweep["basis_arm"]][0]
+
+    ledger, _ = backtest.simuler_bets(preds, skriv_ut=False)
+    profitter, innsatser, vant_flagg, clv_verdier = backtest.hent_metrikkserier(ledger)
+    forventet = backtest.oppsummer_ledger(
+        profitter, innsatser, vant_flagg, config.STARTKAPITAL,
+        clv_verdier=clv_verdier,
+        n_resamples=backtest.BOOTSTRAP_N_RESAMPLES, seed=backtest.BOOTSTRAP_SEED,
+    )
+    assert basis["metrikker"] == forventet
+    assert sweep["basis_arm"] == "halv"
+
+
+def test_flat_armen_bruker_flat_innsats_belop():
+    preds = [
+        lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                        bet="Hjemme (A)", side="hjemme", hjemme_vant=1),
+        lag_prediksjon(kamp_dato="2022-11-11", game_id="2", kamp="C vs D",
+                        bet="Hjemme (C)", side="hjemme", hjemme_vant=1),
+    ]
+    sweep = backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+    flat = [a for a in sweep["armer"] if a["etikett"] == "flat"][0]
+    forventet_flat = backtest.flat_innsats_belop(config.STARTKAPITAL)
+    assert flat["flat_innsats"] == forventet_flat
+    assert flat["metrikker"]["sum_innsats"] == pytest.approx(
+        flat["metrikker"]["antall_bets"] * forventet_flat
+    )
+
+
+def test_flat_armen_sender_ingen_kellyfraksjon(monkeypatch):
+    kalt_med = []
+    ekte_simuler_bets = backtest.simuler_bets
+
+    def _spion(prediksjoner, **kwargs):
+        kalt_med.append(kwargs)
+        return ekte_simuler_bets(prediksjoner, **kwargs)
+
+    monkeypatch.setattr(backtest, "simuler_bets", _spion)
+    preds = [lag_prediksjon(hjemme_vant=1)]
+    backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+
+    flat_kall = kalt_med[0]
+    assert flat_kall["kelly_fraksjon"] is None
+    assert flat_kall["flat_innsats"] is not None
+
+
+def test_flat_armen_better_kandidater_kelly_armene_hopper_over():
+    kelly_null = lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                                  bet="Hjemme (A)", side="hjemme", modell_prob=0.45,
+                                  odds=2.00, hjemme_vant=1)
+    vanlig = lag_prediksjon(kamp_dato="2022-11-11", game_id="2", kamp="C vs D",
+                              bet="Hjemme (C)", side="hjemme", modell_prob=0.65,
+                              odds=2.00, hjemme_vant=1)
+    sweep = backtest.kjor_kelly_sweep([kelly_null, vanlig], skriv_ut=False)
+    flat = [a for a in sweep["armer"] if a["etikett"] == "flat"][0]
+    kelly_armer = [a for a in sweep["armer"] if a["etikett"] != "flat"]
+
+    assert flat["metrikker"]["antall_bets"] == 2
+    assert flat["tellere"]["kandidater_uten_kelly_edge"] == 0
+    for arm in kelly_armer:
+        assert arm["metrikker"]["antall_bets"] == 1
+        assert arm["tellere"]["kandidater_uten_kelly_edge"] == 1
+
+
+def test_alle_armer_ser_samme_prediksjoner(monkeypatch):
+    preds = [
+        lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                        bet="Hjemme (A)", side="hjemme", hjemme_vant=1),
+        lag_prediksjon(kamp_dato="2022-11-11", game_id="2", kamp="C vs D",
+                        bet="Hjemme (C)", side="hjemme", hjemme_vant=0),
+    ]
+    snapshot = copy.deepcopy(preds)
+
+    sette_inn = []
+    ekte_simuler_bets = backtest.simuler_bets
+
+    def _spion(prediksjoner, **kwargs):
+        sette_inn.append(list(prediksjoner))
+        return ekte_simuler_bets(prediksjoner, **kwargs)
+
+    monkeypatch.setattr(backtest, "simuler_bets", _spion)
+    backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+
+    assert len(sette_inn) == 4
+    for kall in sette_inn:
+        assert kall == snapshot
+    assert preds == snapshot
+
+
+def test_kelly_sweep_bruker_samme_bootstrap_seed_for_alle_armer():
+    preds = [lag_prediksjon(hjemme_vant=1)]
+    sweep = backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+    for arm in sweep["armer"]:
+        assert arm["metrikker"]["bootstrap_seed"] == backtest.BOOTSTRAP_SEED
+        assert arm["metrikker"]["bootstrap_n_resamples"] == backtest.BOOTSTRAP_N_RESAMPLES
+
+
+def test_kelly_sweep_er_deterministisk():
+    preds = [
+        lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                        bet="Hjemme (A)", side="hjemme", hjemme_vant=1),
+        lag_prediksjon(kamp_dato="2022-11-11", game_id="2", kamp="C vs D",
+                        bet="Hjemme (C)", side="hjemme", hjemme_vant=0),
+    ]
+    tidspunkt = "2026-08-27T12:00:00"
+    sweep1 = backtest.kjor_kelly_sweep(preds, opprettet=tidspunkt, skriv_ut=False)
+    sweep2 = backtest.kjor_kelly_sweep(preds, opprettet=tidspunkt, skriv_ut=False)
+    assert sweep1 == sweep2
+
+
+def test_kelly_sweep_reiser_holdoutfeil_for_laste_datoer(monkeypatch):
+    def _sprakk(*args, **kwargs):
+        raise AssertionError("simuler_bets skal aldri kalles før holdout-pre-flighten er ferdig")
+
+    monkeypatch.setattr(backtest, "simuler_bets", _sprakk)
+    p = lag_prediksjon(kamp_dato=config.HOLDOUT_START_DATO,
+                        as_of_dato=config.HOLDOUT_START_DATO, hjemme_vant=1)
+    with pytest.raises(backtest.HoldoutLaastFeil):
+        backtest.kjor_kelly_sweep([p], skriv_ut=False)
+
+
+def test_kelly_sweep_sjekker_bade_as_of_og_kamp_dato():
+    p1 = lag_prediksjon(kamp_dato="2022-11-10", as_of_dato=config.HOLDOUT_START_DATO,
+                         hjemme_vant=1)
+    with pytest.raises(backtest.HoldoutLaastFeil):
+        backtest.kjor_kelly_sweep([p1], skriv_ut=False)
+
+    p2 = lag_prediksjon(kamp_dato=config.HOLDOUT_START_DATO, as_of_dato="2022-11-10",
+                         hjemme_vant=1)
+    with pytest.raises(backtest.HoldoutLaastFeil):
+        backtest.kjor_kelly_sweep([p2], skriv_ut=False)
+
+
+def test_kelly_sweep_har_ingen_holdout_bryter():
+    s = inspect.signature(backtest.kjor_kelly_sweep)
+    assert not any("holdout" in p for p in s.parameters)
+    k = inspect.getsource(backtest.kjor_kelly_sweep)
+    assert "tillat_holdout" not in k
+    assert "HOLDOUT_START_DATO" not in k
+
+
+def test_tom_prediksjonsliste_gir_fire_tomme_armer():
+    sweep = backtest.kjor_kelly_sweep([], skriv_ut=False)
+    assert len(sweep["armer"]) == 4
+    for arm in sweep["armer"]:
+        assert arm["metrikker"]["antall_bets"] == 0
+        assert arm["tellere"]["bets_plassert"] == 0
+
+
+def test_kelly_sweep_er_json_serialiserbar():
+    preds = [lag_prediksjon(hjemme_vant=1)]
+    sweep = backtest.kjor_kelly_sweep(preds, skriv_ut=False)
+    json.dumps(sweep)
