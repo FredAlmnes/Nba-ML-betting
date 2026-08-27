@@ -975,18 +975,26 @@ def kjor_og_lagre(data, holdout=False, katalog=BACKTEST_KATALOG, tidspunkt=None,
                     maks_innsats=config.MAX_INNSATS,
                     flat_innsats=None,
                     innbrenning_maaneder=INNBRENNING_MANEDER,
+                    kjor_sweep=False,
                     skriv_ut=True):
     """
     Komponerer predict-passet, deretter simuleringspasset, bygger
     manifestet og skriver løpet — funksjonen plan 05-10s
-    08_kjor_backtest.py kaller. Plan 05-09s Kelly-sweep kaller den BEVISST
-    IKKE: sweepen gjenbruker ett cachet predict-pass og kaller simuler_bets
-    per fraksjon i stedet.
+    08_kjor_backtest.py kaller.
 
     Når `holdout` er sann kalles den holdout-inngangen; når den er usann
     kalles kjor_backtest. Setter ALDRI det låste holdout-overstyrings-
     flagget sant noe sted i denne funksjonen — omtal alltid oppførselen i
     prosa som "holdout-inngangen", aldri som en direkte tilordning av flagget.
+
+    `holdout` og `kjor_sweep` kan ikke være sanne samtidig — reiser
+    ValueError HELT ØVERST, før noe predict-pass kalles og før noen
+    katalog opprettes. Dette er en kategorifeil, ikke en uimplementert
+    kombinasjon: den låste 2024-25-bolken brukes opp NØYAKTIG ÉN GANG på
+    en frossen konfigurasjon (plan 05-13), mens en sweep finnes for å
+    VELGE den konfigurasjonen (plan 05-12) — å sweepe over den bolken
+    ville vært tuning på nettopp det som skal forbli urørt til
+    beslutningen er tatt.
 
     Inneholder ingen forsøk-fangst-blokk: en HoldoutLaastFeil fra
     predict-passet må nå kalleren med INGEN kjøre-katalog opprettet, og det
@@ -996,7 +1004,26 @@ def kjor_og_lagre(data, holdout=False, katalog=BACKTEST_KATALOG, tidspunkt=None,
     Manifestets `type`-felt settes fra `holdout`-argumentet, slik at et
     holdout-løp er identifiserbart fra sitt eget manifest uten å konsultere
     STATE.md.
+
+    Når `kjor_sweep` er sann kjøres plan 05-09s Kelly-sweep ETTER at
+    skriv_kjoring har returnert, over NØYAKTIG den samme in-memory
+    prediksjonslisten simuleringspasset allerede konsumerte — aldri et
+    andre predict-pass. manifest.json er løpets primære bevis, så det
+    skrives FØRST, og en feil i det diagnostiske del-resultatet kan aldri
+    koste hovedresultatet. Returverdien (`sti, manifest, ledger`) endres
+    IKKE av dette flagget — sweepens eget resultat havner kun på disk; en
+    kaller som vil ha sweep-dict-en i minnet kaller kjor_kelly_sweep selv
+    eller leser den skrevne filen tilbake.
     """
+    if holdout and kjor_sweep:
+        raise ValueError(
+            "holdout og kjor_sweep kan ikke settes samtidig: den låste holdout-"
+            "bolken skal brukes opp nøyaktig én gang på en allerede frossen "
+            "konfigurasjon, mens en sweep finnes for å velge den "
+            "konfigurasjonen — å sweepe over den bolken ville vært tuning på "
+            "nettopp det som skal forbli urørt"
+        )
+
     felles_kwargs = dict(
         min_value_terskel=min_value_terskel, min_odds=min_odds, maks_odds=maks_odds,
         min_treningskamper=min_treningskamper, kalibrer_andel=kalibrer_andel,
@@ -1021,6 +1048,13 @@ def kjor_og_lagre(data, holdout=False, katalog=BACKTEST_KATALOG, tidspunkt=None,
         type_kjoring=type_kjoring, innbrenning_maaneder=innbrenning_maaneder,
     )
     sti = skriv_kjoring(run_id, manifest, ledger, katalog=katalog)
+
+    if kjor_sweep:
+        sweep = kjor_kelly_sweep(
+            prediksjoner, run_id=run_id, startkapital=startkapital,
+            min_innsats=min_innsats, maks_innsats=maks_innsats, skriv_ut=skriv_ut,
+        )
+        skriv_kelly_sweep(run_id, sweep, katalog=katalog)
 
     return sti, manifest, ledger
 
@@ -1202,3 +1236,48 @@ def kjor_kelly_sweep(prediksjoner, run_id=None, startkapital=config.STARTKAPITAL
         print("=" * 60)
 
     return sweep
+
+
+def skriv_kelly_sweep(run_id, sweep, katalog=BACKTEST_KATALOG):
+    """
+    Skriver `sweep` som SWEEP_FIL inn i en ALLEREDE EKSISTERENDE
+    kjøre-katalog under `katalog`, og returnerer den skrevne filens sti.
+    Speiler skriv_kjoring sin stiform bevisst, slik at de to skriverne
+    aldri kan avvike om sti-sikkerhet: validerer `run_id` via
+    _valider_run_id, slår den sammen med `katalog` via os.path.join,
+    krever at den absolutte kjøre-stien starter med den absolutte
+    katalog-stien pluss en separator (ellers ValueError).
+
+    To last-bærende egenskaper, begge bevisste:
+
+    1. Katalogen må FINNES fra før — den opprettes ALDRI her. En
+       kelly-sweep er et diagnostisk delresultat av ÉN kjøring
+       (05-CONTEXT.md sin ordlyd), så en sweep uten et manifest.json ved
+       siden av seg ville vært et tall uten noe konfigurasjon knyttet til
+       seg — nøyaktig det BT-05 finnes for å forhindre. Kaster
+       FileNotFoundError med den manglende stien navngitt når katalogen
+       ikke finnes.
+    2. Filen må IKKE finnes fra før. Åpnes i eksklusiv opprettelses-modus
+       ("x") slik at en andre skriving kaster FileExistsError i stedet for
+       stille å erstatte en tidligere sweep — samme bevis-bevarende
+       egenskap skriv_kjoring får fra os.makedirs uten exist_ok.
+    """
+    _valider_run_id(run_id)
+
+    run_sti = os.path.join(katalog, run_id)
+    katalog_abs = os.path.abspath(katalog)
+    run_abs = os.path.abspath(run_sti)
+    if not run_abs.startswith(katalog_abs + os.sep):
+        raise ValueError(f"run_id løser til en sti utenfor {katalog!r}: {run_sti!r}")
+
+    if not os.path.isdir(run_sti):
+        raise FileNotFoundError(
+            f"Kjøre-katalogen {run_sti!r} finnes ikke — en kelly-sweep er et "
+            "delresultat av en eksisterende kjøring og kan aldri skrives uten den"
+        )
+
+    sweep_sti = os.path.join(run_sti, SWEEP_FIL)
+    with open(sweep_sti, "x", encoding="utf-8") as f:   # "x" — kaster FileExistsError i stedet for å overskrive en tidligere sweep
+        json.dump(sweep, f, ensure_ascii=False, indent=2)
+
+    return sweep_sti
