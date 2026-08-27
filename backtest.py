@@ -27,7 +27,10 @@ import odds
 import skadefilter
 import spillerlogg
 import teams
-from strategy import beregn_value_og_ev, fjern_vigorish
+from strategy import beregn_value_og_ev, fjern_vigorish, beregn_innsats, er_duplikat, finn_bet_nokkel
+# metrics.py importerer kun numpy og strategy.fjern_vigorish, så denne
+# importen åpner ingen sirkel tilbake til backtest.py.
+from metrics import beregn_clv, beregn_profitt
 
 
 DATO_KOLONNE = "GAME_DATE_HJEMME"    # Samme kolonne model.py/features.py bruker for kronologisk sortering
@@ -436,3 +439,252 @@ def kjor_endelig_holdout_backtest(data, **kwargs):
         )
 
     return kjor_backtest(data, datoer=holdout_datoer, tillat_holdout=True, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# 4. Simuleringspass: innsats, ledger og oppgjør (plan 05-08 Task 1)
+# ---------------------------------------------------------------------------
+
+
+FLAT_INNSATS_ANDEL = 0.02   # D-05-03: 2% av config.STARTKAPITAL = 20.00 kr, sammenfaller med config.MIN_INNSATS
+
+# De første tolv feltene er 06_bot.py:278-291s levende bet-dict, i SAMME
+# rekkefølge, slik at et menneske kan diffe ledger.csv mot bets.json
+# kolonne for kolonne. `clv` er BT-06s per-bet-felt. De siste seks er
+# rene backtest-provenance-/revisjonsfelt uten noe levende motstykke.
+#
+# To bevisste avvik fra den levende dict-en, nedtegnet her fordi begge
+# ellers ville lest som bugs: `value` og `ev` er rå floats her, mens
+# verdi_deteksjon.py:188/:202 formaterer dem som prosent-strenger for den
+# levende CSV-overleveringen (ledgeren konsumeres av metrics.py, ikke av
+# et dashboard). `modell` bærer den levende visningsstrengen
+# f"{modell_prob:.1%}", mens prediksjonsradens EGET `modell`-felt
+# (MODELL_ETIKETT) flyttes til `modell_etikett` — å gjenbruke navnet
+# `modell` til to ulike ting på tvers av de to filene ville vært verre
+# enn én ekstra kolonne.
+LEDGER_KOLONNER = [
+    "dato", "kamp_dato", "kamp", "bet", "odds", "innsats", "modell",
+    "modell_prob", "value", "ev", "status", "gevinst",
+    "clv", "game_id", "side", "retrent_dato", "modell_etikett",
+    "saldo_for", "saldo_etter_dato",
+]
+
+
+def flat_innsats_belop(startkapital):
+    """
+    D-05-03s flate stake: `round(startkapital * FLAT_INNSATS_ANDEL, 2)`.
+
+    Eksisterer som en navngitt funksjon utelukkende slik at plan 05-09s
+    Kelly-sweep har ett sted å hente det flate beløpet fra, og slik at
+    D-05-03s formel er grep-bar. `kelly_fraksjon` satt til null er IKKE en
+    flat stake — strategy.beregn_innsats returnerer 0.0 for hvert bet ved
+    den fraksjonen (05-RESEARCH.md Pitfall 6) — og det er derfor den flate
+    armen er en `backtest.py`-lokal gren i stedet for en strategy.py-parameter.
+    """
+    return round(startkapital * FLAT_INNSATS_ANDEL, 2)
+
+
+def bet_vant(side, hjemme_vant):
+    """
+    Sant når `side` er "hjemme" og hjemmelaget vant, eller `side` er
+    "borte" og hjemmelaget IKKE vant. Kaster ValueError på en ukjent side
+    i stedet for å stille anta et fortegn — en skrivefeil ville ellers
+    gjort opp hvert eneste bet som et tap og stille halvert den rapporterte
+    ROI-en.
+    """
+    if side == "hjemme":
+        return bool(hjemme_vant)
+    if side == "borte":
+        return not bool(hjemme_vant)
+    raise ValueError(f"Ukjent side {side!r} — forventet 'hjemme' eller 'borte'")
+
+
+def beregn_innsats_for_kandidat(prediksjon, saldo, kelly_fraksjon, min_innsats,
+                                  maks_innsats, flat_innsats=None):
+    """
+    Beregner innsatsen for én kandidat, uten å lese noe som først finnes
+    ETTER at beslutningen er tatt: verken kampens utfall eller en senere
+    markedspris. Dette er med hensikt den smaleste flaten der en slik
+    senere verdi kunne lekket inn i en stake, så kildekoden kan sjekkes fri
+    for de forbudte tokenene i femten linjer i stedet for hele
+    simuleringsløkken.
+
+    Returnerer `flat_innsats` uendret når den er satt (D-05-03s flate arm);
+    ellers `beregn_innsats(saldo, prediksjon["modell_prob"], prediksjon["odds"],
+    kelly_fraksjon, min_innsats, maks_innsats)`. Leser bevisst kun
+    `modell_prob` og `odds` fra prediksjonsraden.
+    """
+    if flat_innsats is not None:
+        return flat_innsats
+    return beregn_innsats(
+        saldo, prediksjon["modell_prob"], prediksjon["odds"],
+        kelly_fraksjon, min_innsats, maks_innsats,
+    )
+
+
+def simuler_bets(prediksjoner, startkapital=config.STARTKAPITAL,
+                   kelly_fraksjon=config.KELLY_FRAKSJON,
+                   min_innsats=config.MIN_INNSATS,
+                   maks_innsats=config.MAX_INNSATS,
+                   flat_innsats=None,
+                   skriv_ut=False):
+    """
+    SIMULATE-passet: re-staker cachede prediksjonsrader fra kjor_backtest
+    gjennom halvt Kelly (eller D-05-03s flate gren), gjør opp hver dato sin
+    bet-batch, fester CLV, og returnerer (ledger, resultat_sim) — samme
+    (rader, resultat)-konvensjon som kjor_backtest.
+
+    Sorteringen (kamp_dato, str(game_id), side) er defensiv, ikke
+    korrigerende: kjor_backtest leverer allerede rader i datorekkefølge,
+    men simuler_bets kalles også direkte av plan 05-09s sweep og av tester,
+    og en bankroll-kurve som avhenger av inndata-rekkefølge ville gjort ROI
+    ikke-reproduserbar — noe BT-05 forbyr.
+
+    Oppgjør skjer BATCHET per simulerte dato, aldri per bet, fordi det er
+    hva 06_bot.py faktisk gjør: sjekk_resultater kjører ved starten av NESTE
+    daglige kjøring, ETTER at forrige dags bets allerede er plassert. Et bet
+    plassert i dag kan derfor aldri finansieres av gevinsten fra en kamp
+    spilt i dag. Å gjøre opp bet for bet i stedet ville lekket utfallet av
+    dagens første kamp inn i innsatsen på dagens andre — et BT-02-brudd som
+    ikke reiser noen feil og bare blåser opp ROI stille.
+
+    CLV festes under oppgjøret, ikke ved rad-konstruksjon, av samme grunn:
+    closing-prisen er data fra ETTER beslutningen, og å lese den i
+    stake-stien er den andre veien denne planen kunne brutt BT-02 stille.
+
+    `resultat_sim` sine nøkler dekker hver stake-knapp som endrer tallene
+    (startkapital, kelly_fraksjon, flat_innsats, min_innsats, maks_innsats),
+    slik at Task 2 kan kopiere dem rett inn i manifest.json uten at noe
+    forblir implisitt.
+    """
+    rader_sortert = sorted(
+        prediksjoner,
+        key=lambda p: (p["kamp_dato"], str(p["game_id"]), p["side"]),
+    )
+
+    resultat_sim = {
+        "startkapital": startkapital,
+        "kelly_fraksjon": kelly_fraksjon,
+        "flat_innsats": flat_innsats,
+        "min_innsats": min_innsats,
+        "maks_innsats": maks_innsats,
+        "kandidater_totalt": len(prediksjoner),
+        "bets_plassert": 0,
+        "kandidater_uten_kelly_edge": 0,
+        "bets_hoppet_over_duplikat": 0,
+        "bets_uten_utfall": 0,
+        "datoer_stoppet_lav_bankroll": 0,
+        "bets_uten_clv": 0,
+        "sluttsaldo": startkapital,
+    }
+
+    grupper = {}
+    rekkefolge_datoer = []
+    for p in rader_sortert:
+        d = p["kamp_dato"]
+        if d not in grupper:
+            grupper[d] = []
+            rekkefolge_datoer.append(d)
+        grupper[d].append(p)
+
+    ledger = []
+    saldo = startkapital
+    brukte_nokler = set()
+
+    for dato in rekkefolge_datoer:
+        dagens_rader = []   # liste av (rad, prediksjon)-par for denne datoen
+
+        for p in grupper[dato]:
+            # 1) Dedup FØRST — hindrer dobbel-betting på samme fysiske kamp.
+            #    vurder_kamp kan aldri flagge begge sider av én kamp (plan
+            #    05-07 beviste dette som en invariant), så denne vakten er
+            #    parity med 06_bot.py:248-256, ikke en sti dagens data
+            #    faktisk treffer.
+            nokkel = finn_bet_nokkel(p["kamp"], p["bet"], p["kamp_dato"])
+            if er_duplikat(nokkel, brukte_nokler):
+                resultat_sim["bets_hoppet_over_duplikat"] += 1
+                continue
+
+            # 2) Uavgjorte kamper (fremdeles ukjent utfall) kan aldri telles
+            #    som et tap — hopp over og tell separat.
+            if pd.isna(p["hjemme_vant"]):
+                resultat_sim["bets_uten_utfall"] += 1
+                continue
+
+            innsats = beregn_innsats_for_kandidat(
+                p, saldo, kelly_fraksjon, min_innsats, maks_innsats, flat_innsats
+            )
+            if innsats == 0.0 and flat_innsats is None:
+                resultat_sim["kandidater_uten_kelly_edge"] += 1
+                continue
+
+            if saldo - innsats < min_innsats * 2:
+                # Stopper DENNE DATOEN, aldri hele løpet: 06_bot.py sin break
+                # avslutter kun dagens plassering, og neste dag starter friskt.
+                # Å avslutte hele backtesten her ville stille avkuttet ledgeren.
+                resultat_sim["datoer_stoppet_lav_bankroll"] += 1
+                break
+
+            brukte_nokler.add(nokkel)
+
+            saldo_for = saldo
+            saldo -= innsats
+
+            # Raden er komplett og uforanderlig som en BESLUTNING på dette
+            # punktet — alt som legges til etterpå er oppgjørs-bokføring
+            # etter beslutningen.
+            rad = {
+                "dato": p["as_of_dato"],
+                "kamp_dato": p["kamp_dato"],
+                "kamp": p["kamp"],
+                "bet": p["bet"],
+                "odds": p["odds"],
+                "innsats": innsats,
+                "modell": f"{p['modell_prob']:.1%}",
+                "modell_prob": p["modell_prob"],
+                "value": p["value"],
+                "ev": p["ev"],
+                "status": "venter",
+                "gevinst": None,
+                "clv": None,
+                "game_id": p["game_id"],
+                "side": p["side"],
+                "retrent_dato": p["retrent_dato"],
+                "modell_etikett": p["modell"],
+                "saldo_for": saldo_for,
+                "saldo_etter_dato": None,
+            }
+            ledger.append(rad)
+            dagens_rader.append((rad, p))
+            resultat_sim["bets_plassert"] += 1
+
+        # Oppgjør skjer FØRST etter at hele dagens kandidatløkke er ferdig.
+        for rad, p in dagens_rader:
+            vant = bet_vant(p["side"], p["hjemme_vant"])
+            rad["status"] = "vant" if vant else "tapte"
+            rad["gevinst"] = beregn_profitt(rad["innsats"], rad["odds"], vant)
+            if vant:
+                # Innsatsen ble allerede trukket, så en vunnet bet legger
+                # tilbake innsats pluss profitt.
+                saldo += rad["innsats"] + rad["gevinst"]
+
+            rad["clv"] = beregn_clv(
+                p["odds_bet_time_hjemme"], p["odds_bet_time_borte"],
+                p["odds_closing_hjemme"], p["odds_closing_borte"], p["side"],
+            )
+            if rad["clv"] is None:
+                resultat_sim["bets_uten_clv"] += 1
+
+        for rad, _ in dagens_rader:
+            rad["saldo_etter_dato"] = saldo
+
+    resultat_sim["sluttsaldo"] = saldo
+
+    if skriv_ut:
+        print("=" * 60)
+        print("SIMULERINGSPASS")
+        for nokkel, verdi in resultat_sim.items():
+            print(f"{nokkel}: {verdi}")
+        print("=" * 60)
+
+    return ledger, resultat_sim
