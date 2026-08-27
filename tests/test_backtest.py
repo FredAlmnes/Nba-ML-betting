@@ -98,8 +98,16 @@ def test_vurder_kamp_respekterer_odds_grensene():
 
 
 def test_vurder_kamp_terskelen_er_strengt_storre_enn():
-    # impl_prob 0.5, modell_prob 0.55 -> value akkurat 0.05, som er terskelen selv
-    assert backtest.vurder_kamp(0.55, 2.00, 2.00) == []
+    # impl_prob 0.5 (eksakt, 1/2.00 er en toer-potens), modell_prob 0.5625
+    # (eksakt, 9/16) og terskel 0.0625 (eksakt, 1/16) — alle tre er dyadiske
+    # flyttall, så subtraksjonen 0.5625 - 0.5 blir EKSAKT 0.0625 uten
+    # avrundingsstøy (Sterbenz' lemma). Dette er en bevisst korrigert
+    # boundary-verdi: 0.55/0.05 (plan-literalens forslag) rammer
+    # kanselleringsstøy — 0.55 - 0.5 blir 0.050000000000000044 i IEEE754,
+    # STØRRE enn 0.05, ikke lik den — se 05-07-SUMMARY.md sin
+    # deviation-seksjon, samme klasse flyttallsfunn som 05-02-SUMMARY.md
+    # allerede dokumenterte for beregn_innsats.
+    assert backtest.vurder_kamp(0.5625, 2.00, 2.00, min_value_terskel=0.0625) == []
 
 
 def test_vurder_kamp_bruker_strategy_funksjonene(monkeypatch):
