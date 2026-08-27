@@ -44,7 +44,7 @@ created: 2026-08-24
 | 05-08-02 | 05-08 | 6 | BT-04 | T-05-08-06 | `bootstrap_roi_ci`/`wilson_ci` match hand-calculated values on a known synthetic bet sequence | unit | `pytest tests/test_metrics.py::test_bootstrap_roi_ci_kjente_verdier -x` | ✅ tests/test_metrics.py + tests/test_backtest.py | ✅ green |
 | 05-08-02 | 05-08 | 6 | BT-05 | T-05-08-04 | `manifest.json` round-trips config + metrics correctly, `run_id` unique per config | unit | `pytest tests/test_backtest.py::test_manifest_inneholder_konfig_og_metrikker -x` | ✅ tests/test_backtest.py | ✅ green |
 | 05-08-01 | 05-08 | 6 | BT-06 | T-05-08-07 | CLV computed as `fjern_vigorish(bet_time) - fjern_vigorish(closing)`, `None` when closing snapshot missing | unit | `pytest tests/test_metrics.py::test_clv_beregning -x` | ✅ tests/test_metrics.py + tests/test_backtest.py | ✅ green |
-| 05-XX-XX | TBD | TBD | BT-07 | — | Kelly sweep produces 4 distinct entries (flat/quarter/half/full) from one cached predict pass, never re-running the walk-forward loop | unit | `pytest tests/test_backtest.py::test_kelly_sweep_bruker_cachet_prediksjoner -x` | ❌ Wave 0 | ⬜ pending |
+| 05-09-01 | 05-09 | 7 | BT-07 | T-05-09-01 | Kelly sweep produces 4 distinct entries (flat/quarter/half/full) from one cached predict pass, never re-running the walk-forward loop | unit | `pytest tests/test_backtest.py::test_kelly_sweep_bruker_cachet_prediksjoner -x` | tests/test_backtest.py | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

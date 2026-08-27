@@ -1470,3 +1470,33 @@ def test_backtest_rorer_fortsatt_ikke_live_tilstand():
     kildetekst = open("backtest.py", encoding="utf-8").read()
     for token in ("bankroll.json", "bets.json", "dashboard"):
         assert token not in kildetekst
+
+
+# --- 8. Ekte sweep over plan 05-07s røyktest-vindu (plan 05-09 Task 3) ---
+
+
+@pytest.mark.skipif(not _EKTE_DATA_TILGJENGELIG, reason=_HOPP_OVER_GRUNN)
+def test_ekte_sweep_gir_fire_armer_fra_en_predict_pass(tmp_path):
+    """
+    To ukers vindu (holder suiten innenfor 20-sekunders-budsjettet), ekte
+    nba_features.csv/odds_arkiv.db/nba_spillerlogg_raw.csv, skriver kun inn i
+    tmp_path — aldri repoets ekte backtests/-katalog.
+    """
+    d = backtest.klargjor_backtestdata(fra="2022-11-01", til="2022-11-14")
+    sti, manifest, ledger = backtest.kjor_og_lagre(
+        d, min_treningskamper=100, kjor_sweep=True, katalog=str(tmp_path), skriv_ut=False
+    )
+
+    with open(os.path.join(sti, backtest.SWEEP_FIL), encoding="utf-8") as f:
+        sweep = json.load(f)
+
+    assert [a["etikett"] for a in sweep["armer"]] == [a[0] for a in backtest.KELLY_ARMER]
+
+    basis = [a for a in sweep["armer"] if a["etikett"] == sweep["basis_arm"]][0]
+    assert basis["metrikker"] == manifest["metrikker"]
+
+    flat = [a for a in sweep["armer"] if a["etikett"] == "flat"][0]
+    kelly_armer = [a for a in sweep["armer"] if a["etikett"] != "flat"]
+    assert flat["metrikker"]["antall_bets"] >= max(
+        a["metrikker"]["antall_bets"] for a in kelly_armer
+    )
