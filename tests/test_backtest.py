@@ -491,3 +491,64 @@ def test_ingen_bar_except_i_datolokken():
     kildetekst_uten_kommentarer = "\n".join(linjer_uten_kommentarer)
     assert "except Exception" not in kildetekst_uten_kommentarer
     assert "except:" not in kildetekst_uten_kommentarer
+
+
+# --- 3. Røyktest mot ekte arkiv, modell og spillerlogg (plan 05-07 Task 3) ---
+
+_EKTE_FILER = ["nba_features.csv", "odds_arkiv.db", "nba_spillerlogg_raw.csv"]
+_EKTE_DATA_TILGJENGELIG = all(os.path.exists(f) for f in _EKTE_FILER)
+_HOPP_OVER_GRUNN = (
+    "krever ekte nba_features.csv/odds_arkiv.db/nba_spillerlogg_raw.csv "
+    "(alle tre er gitignored, fraværende i en fersk klone)"
+)
+
+
+@pytest.mark.skipif(not _EKTE_DATA_TILGJENGELIG, reason=_HOPP_OVER_GRUNN)
+def test_prediksjoner_er_uendret_naar_fremtidig_utfall_snus():
+    """
+    Flipper HJEMME_VANT kun på siste behandlede dato i et kort ekte vindu, og
+    sjekker at prediksjonene for den datoen er uendret bortsett fra selve
+    hjemme_vant-feltet. model.del_for_trening filtrerer med strengt <, så
+    ingen kamp på siste dato kan noensinne havne i noe treningsvindu i dette
+    løpet — en uendret prediksjon er derfor den direkte observerbare
+    konsekvensen av BT-02, ikke en tilfeldighet ved fixturen.
+    """
+    d1 = backtest.klargjor_backtestdata(fra="2022-10-24", til="2022-11-30")
+    p1, r1 = backtest.kjor_backtest(d1, min_treningskamper=100, skriv_ut=False)
+
+    siste_dato = d1["datoer"][-1]
+
+    d2 = backtest.klargjor_backtestdata(fra="2022-10-24", til="2022-11-30")
+    df2 = d2["features_df"].copy()
+    maske = df2["GAME_DATE_HJEMME"].astype(str).str[:10] == siste_dato
+    df2.loc[maske, "HJEMME_VANT"] = 1 - df2.loc[maske, "HJEMME_VANT"]
+    d2["features_df"] = df2
+
+    p2, r2 = backtest.kjor_backtest(d2, min_treningskamper=100, skriv_ut=False)
+
+    rader1 = sorted((r for r in p1 if r["kamp_dato"] == siste_dato), key=lambda r: r["game_id"])
+    rader2 = sorted((r for r in p2 if r["kamp_dato"] == siste_dato), key=lambda r: r["game_id"])
+    assert len(rader1) == len(rader2)
+    for a, b in zip(rader1, rader2):
+        for nokkel in a:
+            if nokkel == "hjemme_vant":
+                continue
+            assert a[nokkel] == b[nokkel], nokkel
+
+
+@pytest.mark.skipif(not _EKTE_DATA_TILGJENGELIG, reason=_HOPP_OVER_GRUNN)
+def test_holdout_er_utilgjengelig_fra_tuning_veien():
+    d = backtest.klargjor_backtestdata(fra=config.HOLDOUT_START_DATO, til="2024-11-15")
+    with pytest.raises(backtest.HoldoutLaastFeil):
+        backtest.kjor_backtest(d, skriv_ut=False)
+
+    d2 = backtest.klargjor_backtestdata(fra=config.HOLDOUT_START_DATO, til="2024-11-15")
+    backtest.kjor_endelig_holdout_backtest(d2, skriv_ut=False)  # skal ikke reise
+
+
+@pytest.mark.skipif(not _EKTE_DATA_TILGJENGELIG, reason=_HOPP_OVER_GRUNN)
+def test_ekte_arkiv_gir_ingen_manglende_bet_time():
+    d = backtest.klargjor_backtestdata(fra="2022-10-24", til="2022-11-30")
+    _, resultat = backtest.kjor_backtest(d, min_treningskamper=100, skriv_ut=False)
+    assert resultat["kamper_hoppet_over_manglende_odds"] == 0
+    assert resultat["kamper_hoppet_over_ukjent_lag"] == 0

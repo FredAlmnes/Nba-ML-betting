@@ -38,9 +38,9 @@ created: 2026-08-24
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 05-XX-XX | TBD | TBD | BT-01 | — | Walk-forward loop produces a ledger for a small synthetic date range | unit/integration | `pytest tests/test_backtest.py::test_kjor_backtest_produserer_ledger -x` | ❌ Wave 0 | ⬜ pending |
-| 05-XX-XX | TBD | TBD | BT-02 | — | Feature/odds/injury lookups never see data dated `>= as_of` | unit (leakage regression, extends `test_parity.py`) | `pytest tests/test_parity.py -x` | ⚠️ Exists, must be extended | ⬜ pending |
-| 05-XX-XX | TBD | TBD | BT-03 | — | `kjor_backtest()` raises `HoldoutLaastFeil` for any date `>= HOLDOUT_START_DATO` unless called via `kjor_endelig_holdout_backtest()` | unit | `pytest tests/test_backtest.py::test_holdout_guard_reiser_feil -x` | ❌ Wave 0 | ⬜ pending |
+| 05-07-02 | 05-07 | 5 | BT-01 | T-05-07-07 | Walk-forward loop produces a ledger for a small synthetic date range | unit/integration | `pytest tests/test_backtest.py::test_kjor_backtest_produserer_ledger -x` | ✅ tests/test_backtest.py | ✅ green |
+| 05-07-03 | 05-07 | 5 | BT-02 | T-05-07-05 | Feature/odds/injury lookups never see data dated `>= as_of` | unit (leakage regression, extends `test_parity.py`) | `pytest tests/test_parity.py -x` | ✅ tests/test_backtest.py | ✅ green |
+| 05-07-01 | 05-07 | 5 | BT-03 | T-05-07-01 | `kjor_backtest()` raises `HoldoutLaastFeil` for any date `>= HOLDOUT_START_DATO` unless called via `kjor_endelig_holdout_backtest()` | unit | `pytest tests/test_backtest.py::test_holdout_guard_reiser_feil -x` | ✅ tests/test_backtest.py | ✅ green |
 | 05-XX-XX | TBD | TBD | BT-04 | — | `bootstrap_roi_ci`/`wilson_ci` match hand-calculated values on a known synthetic bet sequence | unit | `pytest tests/test_metrics.py::test_bootstrap_roi_ci_kjente_verdier -x` | ❌ Wave 0 | ⬜ pending |
 | 05-XX-XX | TBD | TBD | BT-05 | — | `manifest.json` round-trips config + metrics correctly, `run_id` unique per config | unit | `pytest tests/test_backtest.py::test_manifest_inneholder_konfig_og_metrikker -x` | ❌ Wave 0 | ⬜ pending |
 | 05-XX-XX | TBD | TBD | BT-06 | — | CLV computed as `fjern_vigorish(bet_time) - fjern_vigorish(closing)`, `None` when closing snapshot missing | unit | `pytest tests/test_metrics.py::test_clv_beregning -x` | ❌ Wave 0 | ⬜ pending |
