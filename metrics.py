@@ -119,3 +119,103 @@ def beregn_maks_drawdown(profitter, startkapital):
                 maks_dd_andel = andel
 
     return round(float(maks_dd_kroner), 2), float(maks_dd_andel)
+
+
+# ---------------------------------------------------------------------
+# Konfidensintervaller: bootstrap ROI + Wilson vinnrate (BT-04)
+# ---------------------------------------------------------------------
+
+
+def bootstrap_roi_ci(profitter, innsatser, n_resamples=1000, seed=42, konfidensnivaa=0.95):
+    """
+    Persentil-metode bootstrap-konfidensintervall for ROI.
+
+    Tre poeng er avgjørende, ikke pynt:
+
+    1. Det som resamples er individuelle BETS, ikke kamper og ikke datoer —
+       et enkelt bet er enheten for uavhengig risiko her. Å resample kamper
+       eller datoer ville implisitt antatt korrelasjon mellom bets på samme
+       kamp/dato som ikke finnes i denne strategien (ett bet per kamp).
+
+    2. Seeden er en fast standardverdi, ikke klokke-avledet, slik at en
+       ny kjøring av samme manifest-konfigurasjon reproduserer et
+       bit-identisk konfidensintervall. Seeden skrives selv inn i
+       manifest.json (BT-05) for sporbarhet.
+
+    3. Et bredt intervall på skalaen dette prosjektet forventer på
+       trenings-/kalibreringsdelen (~190-360 bets) er det KORREKTE og
+       forventede resultatet, og er nøyaktig grunnen til at BT-04 krever
+       et konfidensintervall i det hele tatt — det er ikke en defekt som
+       skal tunes bort.
+
+    Kaster ValueError ved ulik lengde på profitter/innsatser — en
+    lengdeforskjell betyr at ledgeren er korrupt, og å fortsette stille
+    ville fabrikkert en ROI fra feiljusterte arrays.
+
+    Returnerer (punktestimat, nedre, oevre) som rene Python-floats —
+    np.percentile gir numpy.float64, og plan 05-08 serialiserer disse
+    verdiene direkte inn i manifest.json via json.dumps, som feiler på
+    numpy.float64.
+    """
+    profitter = np.asarray(profitter, dtype=float)
+    innsatser = np.asarray(innsatser, dtype=float)
+
+    if len(profitter) != len(innsatser):
+        raise ValueError(
+            "profitter og innsatser må ha samme lengde — ledgeren er korrupt"
+        )
+
+    if len(profitter) == 0:
+        return 0.0, 0.0, 0.0
+
+    # Punktestimatet kommer fra den ORIGINALE ledgeren, aldri fra
+    # resample-fordelingens gjennomsnitt.
+    punktestimat = float(profitter.sum() / innsatser.sum())
+
+    rng = np.random.default_rng(seed)
+    n = len(profitter)
+    resample_roi = np.empty(n_resamples, dtype=float)
+    for i in range(n_resamples):
+        idx = rng.integers(0, n, size=n)
+        resample_roi[i] = profitter[idx].sum() / innsatser[idx].sum()
+
+    halv_hale = 100 * (1 - konfidensnivaa) / 2
+    nedre = np.percentile(resample_roi, halv_hale)
+    oevre = np.percentile(resample_roi, 100 - halv_hale)
+
+    return punktestimat, float(nedre), float(oevre)
+
+
+def wilson_ci(antall_vunnet, antall_totalt, z=1.96):
+    """
+    Wilson score-intervall for en binomisk andel (vinnrate).
+
+    Returnerer (p, nedre, oevre) som rene Python-floats, med nedre
+    klemt til 0.0 og oevre til 1.0. Returnerer (0.0, 0.0, 0.0) når
+    antall_totalt er null.
+
+    z=1.96 er en hardkodet konstant for et 95%-intervall, ikke et
+    norm.ppf-oppslag fra en ekstern statistikk-pakke — z-scoren for et
+    fast konfidensnivå endrer seg aldri, og å hente inn en udeklarert
+    avhengighet for én konstant er avhengighets-krypp, ikke rigor.
+
+    Wilson brukes i stedet for en naiv normal-approksimasjon fordi den
+    naive intervallformen produserer grenser utenfor [0, 1] ved dette
+    utvalgs-nivået — 0/10-tilfellet i testene demonstrerer akkurat det
+    Wilson fikser (en naiv 0 ± 0 kollapser til et intervall uten
+    informasjon, mens Wilson gir en meningsfull øvre grense).
+    """
+    if antall_totalt == 0:
+        return 0.0, 0.0, 0.0
+
+    n = float(antall_totalt)
+    p = antall_vunnet / n
+    z2 = z * z
+
+    senter = (p + z2 / (2 * n)) / (1 + z2 / n)
+    halvbredde = (z / (1 + z2 / n)) * ((p * (1 - p) / n + z2 / (4 * n * n)) ** 0.5)
+
+    nedre = max(0.0, senter - halvbredde)
+    oevre = min(1.0, senter + halvbredde)
+
+    return float(p), float(nedre), float(oevre)
