@@ -528,6 +528,102 @@ def parse_snapshot_til_rader(snapshot, kamp_dato, snapshot_type, hentet_tidspunk
 
 
 # ---------------------------------------------------------------------------
+# Delt pris-seleksjonsregel (plan 05-04, BT-01/BT-02)
+#
+# velg_beste_pris_per_utfall er DEN ENESTE definisjonen i hele kodebasen av
+# "hvilken pris spiller vi på" — både verdi_deteksjon.finn_value_bets (live)
+# og hent_bet_time_pris (backtest) lenger ned kaller denne samme funksjonen.
+# Strikt '>' (ikke '>=') beholder dagens live-oppførsel: ved uavgjort beste
+# pris vinner den FØRSTE bookmakeren i iterasjonsrekkefølgen. En backtest som
+# brøt uavgjort-regelen annerledes ville validert en prisingsregel live-boten
+# faktisk aldri kjører (samme CORE-04-parity-bekymring som teams.py/
+# strategy.py-ekstraksjonene i Fase 2 fjernet for lag-navn og value/EV).
+#
+# prisrader_fra_kamp flater ut ett live Odds API-kamp-dict til de samme
+# (utfall_navn, pris, bookmaker)-triplene arkivets rader allerede har, ved å
+# gjenbruke akkurat samme tolerante idiom som parse_snapshot_til_rader over —
+# slik konvergerer live-veien og arkiv-veien på én og samme utflatingslogikk.
+# ---------------------------------------------------------------------------
+
+
+def velg_beste_pris_per_utfall(prisrader, hjemme_navn, borte_navn):
+    """
+    Reduserer en samling (utfall_navn, pris, bookmaker)-tripler til beste pris
+    per side. Returnerer (beste_hjemme_odds, beste_borte_odds,
+    beste_hjemme_bookmaker, beste_borte_bookmaker) — alle fire `None` hvis
+    ingen kvalifiserende rad finnes for den siden.
+
+    Dette ER den delte prisingsregelen — se banner-kommentaren over. Kalles
+    av verdi_deteksjon.finn_value_bets (live) og av hent_bet_time_pris
+    (backtest, lenger ned i denne filen), aldri implementert på nytt noe
+    annet sted.
+
+    Strikt '>' (aldri '>=') beholder live-botens eksisterende uavgjort-
+    oppførsel: den FØRSTE bookmakeren som treffer beste pris vinner. En
+    `pris` som ikke er strengt positiv (0, negativ) ignoreres — det er
+    samme "ingen pris funnet"-semantikk som den gamle `0`-sentinelen i
+    verdi_deteksjon.py hadde, bare uttrykt som `None` i stedet for `0`.
+    Enhver `utfall_navn` som verken matcher `hjemme_navn` eller `borte_navn`
+    ignoreres helt.
+
+    `pris` føres videre uendret — INGEN `float()`-tvang her, slik at live-
+    veiens emitterte dict beholder akkurat de verditypene den emitterer i dag.
+    """
+    beste_hjemme_odds = None
+    beste_borte_odds = None
+    beste_hjemme_bookmaker = None
+    beste_borte_bookmaker = None
+
+    for utfall_navn, pris, bookmaker in prisrader:
+        if not pris > 0:
+            continue
+
+        if utfall_navn == hjemme_navn:
+            if beste_hjemme_odds is None or pris > beste_hjemme_odds:
+                beste_hjemme_odds = pris
+                beste_hjemme_bookmaker = bookmaker
+        elif utfall_navn == borte_navn:
+            if beste_borte_odds is None or pris > beste_borte_odds:
+                beste_borte_odds = pris
+                beste_borte_bookmaker = bookmaker
+
+    return beste_hjemme_odds, beste_borte_odds, beste_hjemme_bookmaker, beste_borte_bookmaker
+
+
+def prisrader_fra_kamp(kamp):
+    """
+    Flater ut ett live Odds API-kamp-dict (bookmakers -> markets -> outcomes)
+    til en liste av (utfall_navn, pris, bookmaker)-tripler, klar til å mates
+    rett inn i velg_beste_pris_per_utfall.
+
+    Bruker akkurat samme tolerante traversering som parse_snapshot_til_rader
+    over: `kamp.get("bookmakers", [])`, `bookmaker.get("markets", [])`, hopper
+    over markeder der `market.get("key") != MARKED`, itererer
+    `market.get("outcomes", [])`, og henter bookmaker-navnet som
+    `bookmaker.get("title", bookmaker.get("key"))`. Bruker alltid modulens
+    MARKED-konstant, aldri en bar h2h-streng-literal.
+
+    De to avvikene dette introduserer sammenlignet med den gamle inline
+    live-løkken — en bookmaker uten `title` faller tilbake til sin `key` i
+    stedet for å kaste `KeyError`, og et marked uten `outcomes`-nøkkel hoppes
+    over i stedet for å kaste — er bevisst konvergens mot arkiv-veiens
+    allerede beviste oppførsel, ikke en tilfeldighet.
+    """
+    prisrader = []
+    for bookmaker in kamp.get("bookmakers", []):
+        for market in bookmaker.get("markets", []):
+            if market.get("key") != MARKED:
+                continue
+            for outcome in market.get("outcomes", []):
+                prisrader.append((
+                    outcome["name"],
+                    outcome["price"],
+                    bookmaker.get("title", bookmaker.get("key")),
+                ))
+    return prisrader
+
+
+# ---------------------------------------------------------------------------
 # Backfill-driveren (plan 04-05)
 #
 # Dette er den eneste koden i denne modulen som faktisk kan bruke opp
