@@ -4,9 +4,17 @@ Tester for kalibrering.py sin kronologiske 3-veis splitt.
 Denne testen vokter CALIB-01 — hvis tren/kalibrer/test-slicene noensinne
 overlapper, blir isotonic-kalibratoren fittet på data den senere
 evalueres på, som er nøyaktig lekkasjebugen fase 3 fikser.
+
+Kildekode-voktertestene for selve fit-logikken (early stopping mot
+kalibreringssettet, kalibratoren fittet kun på kalibreringssettet,
+IsotonicRegression sin out_of_bounds="clip") flyttet til
+tests/test_model.py i Plan 05-02, siden model.py nå eier alle .fit()-kall
+i kodebasen. Denne filen vokter fortsatt selve splitten (over) pluss ETT
+nytt guard-test: at 03_tren_modell.py delegerer til model.py i stedet for
+å re-inline sin egen kopi av fit-logikken (se
+test_treningsskript_delegerer_til_model under).
 """
 
-import re
 from pathlib import Path
 
 import pandas as pd
@@ -56,13 +64,16 @@ def test_ugyldig_kalibrer_cutoff_gir_verdifeil(kamp_datoer_df):
 
 
 # ---------------------------------------------------------------------------
-# Kildekode-vokterester for 03_tren_modell.py (Plan 03-02)
+# Kildekode-voktertest for 03_tren_modell.py (Plan 05-02)
 #
 # 03_tren_modell.py kan ikke importeres av en test (modulnavn starter med
-# et siffer, og den kjører en full XGBoost-treningsrunde ved import). Disse
-# testene leser derfor skriptet som tekst og sjekker at CALIB-01-lekkasje-
-# bugen (kalibratoren fittet på testsettet den senere evalueres på) ikke
-# kan smyge seg tilbake inn i koden ubemerket.
+# et siffer, og den kjører en full XGBoost-treningsrunde ved import). Denne
+# testen leser derfor skriptet som tekst og sjekker at fit-logikken forblir
+# delegert til model.py — modulen som nå eier alle .fit()-kall — i stedet
+# for å bli re-inlinet lokalt. Guardene for selve fit-DISIPLINEN (early
+# stopping mot kalibreringssettet, kalibratoren fittet kun på
+# kalibreringssettet, IsotonicRegression sin clip-oppførsel) lever nå i
+# tests/test_model.py, rettet mot model.py.
 # ---------------------------------------------------------------------------
 
 def _treningsskript_kode():
@@ -83,30 +94,17 @@ def _treningsskript_kode():
     return "\n".join(linjer)
 
 
-def test_early_stopping_bruker_aldri_testsettet():
-    """D-04 — testsettet skal aldri styre hvor mange trær som bygges."""
+def test_treningsskript_delegerer_til_model():
+    """
+    Fit-logikken deles med walk-forward-løkken (Phase 5) kun så lenge
+    ingen re-inliner en bekvem lokal kopi inn i treningsskriptet igjen —
+    en re-inlinet kopi ville drevet bort fra CALIB-01-disiplinen usynlig,
+    siden 03_tren_modell.py ikke kan importeres av en test for å sjekke
+    dette direkte.
+    """
     kode = _treningsskript_kode()
-    assert re.search(
-        r"eval_set\s*=\s*\[\(\s*X_kalibrer\s*,\s*y_kalibrer\s*\)\]", kode
-    )
-    assert re.search(r"eval_set\s*=\s*\[\(\s*X_test", kode) is None
-    # Skriptet skal aldri drifte tilbake til en inline 2-veis splitt som
-    # forbikjører den testede del_kronologisk_3veis-funksjonen.
-    assert "from kalibrering import del_kronologisk_3veis" in kode
-
-
-def test_kalibrator_fittes_kun_pa_kalibreringssettet():
-    """CALIB-01 — dette er selve lekkasjebugen fase 3 lukker."""
-    kode = _treningsskript_kode()
-    assert re.search(
-        r"kalibrerer\.fit\(\s*y_rå_kalibrer\s*,\s*y_kalibrer\s*\)", kode
-    )
-    assert re.search(r"kalibrerer\.fit\([^)]*y_test", kode) is None
-
-
-def test_isotonic_klipper_utenfor_omraade():
-    """Pitfall 3 — sklearn-standarden "nan" ville stille korrumpert reliabilitetstabellen."""
-    kode = _treningsskript_kode()
-    assert re.search(
-        r'IsotonicRegression\(\s*out_of_bounds\s*=\s*"clip"\s*\)', kode
-    )
+    assert "import model" in kode
+    assert "XGBClassifier(" not in kode
+    assert "IsotonicRegression(" not in kode
+    assert ".fit(" not in kode
+    assert "pickle.dump(" not in kode

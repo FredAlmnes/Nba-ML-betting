@@ -14,12 +14,12 @@ på fremtidige data!
 
 import pandas as pd
 import numpy as np
-import xgboost as xgb
 from sklearn.metrics import accuracy_score, log_loss, brier_score_loss
-from sklearn.isotonic import IsotonicRegression
-from modell_utils import KalibrertModell
-from kalibrering import del_kronologisk_3veis
-import pickle
+# NB: modulen heter "model" (entall, engelsk), den fittede XGBoost-
+# estimatoren under kalles fortsatt "modell" (norsk), og modell_utils er en
+# TREDJE, annerledes ting (kun KalibrertModell-wrapperklassen). model.py
+# eier nå alle .fit()-kall — se model.py sin modul-docstring.
+import model
 
 # -------------------------------------------------------
 # 1. Les inn features
@@ -34,12 +34,9 @@ print(f"Totalt {len(df)} kamper tilgjengelig")
 # 2. Velg hvilke features vi bruker
 # -------------------------------------------------------
 # Vi bruker differanse-features + rullende stats for hvert lag
-feature_kolonner = [k for k in df.columns if
-                    k.startswith("DIFF_") or
-                    k.startswith("HJEMME_RULL_") or
-                    k.startswith("BORTE_RULL_")]
+feature_kolonner = model.velg_feature_kolonner(df)
 
-maal_kolonne = "HJEMME_VANT"
+maal_kolonne = model.MAAL_KOLONNE
 
 print(f"\nAntall features: {len(feature_kolonner)}")
 print("Features brukt:", feature_kolonner)
@@ -68,7 +65,7 @@ y = df[maal_kolonne]
 # dette skillet ville kalibratoren blitt evaluert på nøyaktig de samme
 # dataene den ble fittet på — kunstig gode tall som ikke sier noe om ekte
 # generalisering (CALIB-01).
-tren_mask, kalibrer_mask, test_mask = del_kronologisk_3veis(df)
+tren_mask, kalibrer_mask, test_mask = model.del_for_trening(df)
 
 X_tren, y_tren = X[tren_mask], y[tren_mask]
 X_kalibrer, y_kalibrer = X[kalibrer_mask], y[kalibrer_mask]
@@ -98,28 +95,13 @@ if len(X_kalibrer) < 1000:
 # -------------------------------------------------------
 print("\nTrener XGBoost-modell...")
 
-modell = xgb.XGBClassifier(
-    n_estimators=300,        # Antall trær
-    max_depth=4,             # Dybde per tre (lav = mindre overfit)
-    learning_rate=0.05,      # Læringshastighet (lav = roligere, bedre)
-    subsample=0.8,           # Bruk 80% av treningsdataene per tre
-    colsample_bytree=0.8,    # Bruk 80% av features per tre
-    use_label_encoder=False,
-    eval_metric="logloss",   # Optimaliser log-loss (god for sannsynligheter)
-    random_state=42,
-    early_stopping_rounds=20 # Stopp tidlig hvis modellen slutter å forbedre seg
-)
-
-modell.fit(
-    X_tren, y_tren,
-    # Early stopping ser nå på kalibreringssettet, ikke testsettet, slik at
-    # testsettet forblir helt urørt av fitting (D-04). Ulempen: kalibrerings-
-    # settet gjør dobbelt arbeid (early stopping + isotonic-fit) — en bevisst,
-    # mindre avveining framfor å innføre en fjerde split (hører til fase 5 /
-    # BT-03).
-    eval_set=[(X_kalibrer, y_kalibrer)],
-    verbose=50  # Skriv ut fremgang hvert 50. tre
-)
+# Selve XGBoost-fittingen (inkl. early stopping mot kalibreringssettet,
+# D-04) skjer nå inne i model.tren_og_kalibrer — se dens docstring for
+# hyperparametrene og begrunnelsen. verbose=50 er funksjonens standard,
+# så konsoll-fremgangen ("[0]"/"[50]"/...) er uendret.
+resultat = model.tren_og_kalibrer(X_tren, y_tren, X_kalibrer, y_kalibrer)
+modell     = resultat["raa_modell"]
+kalibrerer = resultat["kalibrerer"]
 
 # -------------------------------------------------------
 # 5. Evaluer modellen
@@ -165,16 +147,11 @@ print(importance.head(10).to_string(index=False))
 
 print("\nKalibrerer modellen (isotonic regression)...")
 
-# Kalibratoren fittes KUN på kalibreringssettet — aldri på testsettet.
-# Testsettet skal først møte kalibratoren gjennom .predict(), aldri .fit()
-# (CALIB-01).
-y_rå_kalibrer = modell.predict_proba(X_kalibrer)[:, 1]
-kalibrerer    = IsotonicRegression(out_of_bounds="clip")
-# Kalibreringssettet er lite og har et smalere score-spenn enn testsettet,
-# så testscorer utenfor det observerte området må klippes til nærmeste
-# kalibrerte verdi. Sklearn-standarden "nan" ville stille korrumpert både
-# metrikkene og bøttetabellen under (RESEARCH.md Pitfall 3).
-kalibrerer.fit(y_rå_kalibrer, y_kalibrer)
+# Selve isotonic-fittingen skjedde allerede inne i model.tren_og_kalibrer
+# (kalibratoren fittes KUN på kalibreringssettet, aldri på testsettet —
+# CALIB-01). Denne seksjonen henter kun ut det ferdige resultatet og
+# scorer/rapporterer det.
+y_rå_kalibrer = resultat["y_raa_kalibrer"]
 
 # Score testsettet gjennom den allerede fittede kalibratoren — testsettet
 # har aldri blitt sett under noen .fit()-kall.
@@ -220,13 +197,9 @@ for _, gruppe in diag.groupby(pd.cut(diag["pred"], bins=10), observed=True):
 # -------------------------------------------------------
 # 8. Lagre kalibrert modell
 # -------------------------------------------------------
-kalibrert_modell = KalibrertModell(modell, kalibrerer)
+kalibrert_modell = resultat["modell"]
 
-with open("nba_modell.pkl", "wb") as f:
-    pickle.dump({
-        "modell":           kalibrert_modell,
-        "feature_kolonner": feature_kolonner
-    }, f)
+model.lagre(kalibrert_modell, feature_kolonner)
 
 print("\nKalibrert modell lagret til 'nba_modell.pkl'")
 print("Kjør nå 04_value_detector.py for å sammenligne med bookmaker-odds!")
