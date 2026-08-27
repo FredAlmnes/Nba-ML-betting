@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-08-26T12:36:42.739Z"
-last_activity: 2026-08-26
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-08-27T09:43:36.846Z"
+last_activity: 2026-08-27
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 35
-  completed_plans: 23
-  percent: 66
+  completed_plans: 24
+  percent: 69
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
-Plan: 2 of 13
+Plan: 3 of 13
 Status: Ready to execute
-Last activity: 2026-08-26
+Last activity: 2026-08-27
 
-Progress: [███████░░░] 66%
+Progress: [███████░░░] 69%
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Progress: [███████░░░] 66%
 | Phase 04 P08 | 25min | 2 tasks | 4 files |
 | Phase 04 P09 | ~2h | 3 tasks | 3 files |
 | Phase 05 P01 | 6min | 3 tasks | 5 files |
+| Phase 05 P02 | 9min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 01: D-05-02 burn-in policy -- include all months in the ledger, report headline ROI/CI twice (full-period = headline, ex-first-2-3-months = sensitivity check) rather than dropping the noisiest early months
 - [Phase 05]: Plan 01: D-05-03 BT-07 flat-stake definition -- a backtest.py-local branch, fixed 2% of config.STARTKAPITAL (20.0 kr) per bet, keeping strategy.py's live-shared contract byte-identical
 - [Phase 05]: Plan 01: D-05-04 scratch artifacts stay ignore-only, unchanged from Phase 1's D-08 -- no deletion performed in this plan
+- [Phase 05]: Plan 02: del_for_trening's as_of branch validates kalibrer_andel before checking window size, so an invalid fraction always raises regardless of history available before as_of
+- [Phase 05]: Plan 02: tren_og_kalibrer keeps verbose=50 default (03_tren_modell.py calls it directly, unchanged stdout); the tren() convenience wrapper Plan 05-07 uses defaults verbose=False since the backtest fits ~24 models per run
 
 ### Pending Todos
 
@@ -149,6 +152,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-26T12:36:42.730Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-08-27T09:43:36.837Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None

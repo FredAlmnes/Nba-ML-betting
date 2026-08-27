@@ -32,8 +32,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Backtest Engine (the core deliverable)
 
-- [ ] **BT-01**: A walk-forward, chronological replay simulates the full decision pipeline (model score → value threshold → odds filter → injury filter → half-Kelly stake) against historical odds, using existing 2022-23 through 2024-25 data plus the historical odds endpoint
-- [ ] **BT-02**: All data pulled into the replay (odds, injury status, rolling stats) is filtered to "known as of date D" — no post-decision-time information anywhere in the loop
+- [x] **BT-01**: A walk-forward, chronological replay simulates the full decision pipeline (model score → value threshold → odds filter → injury filter → half-Kelly stake) against historical odds, using existing 2022-23 through 2024-25 data plus the historical odds endpoint
+- [x] **BT-02**: All data pulled into the replay (odds, injury status, rolling stats) is filtered to "known as of date D" — no post-decision-time information anywhere in the loop
 - [x] **BT-03**: A locked, never-touched final holdout slice exists and is checked exactly once, after all threshold/parameter decisions are frozen on the train/calibrate data
 - [ ] **BT-04**: ROI, win rate, and max drawdown are reported on the flagged-bet subset only, with bet count and a confidence interval attached to every headline number
 - [ ] **BT-05**: Each backtest run produces a reproducible, versioned run manifest (config + date range + metrics), enabling a clear before/after comparison against the current losing live configuration
@@ -83,8 +83,8 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 | CALIB-02 | Phase 3 | Complete |
 | ODDS-01 | Phase 4 | Complete (9/9 plans — full 480/480-date archive for bet_time and closing, 17,710 credits spent, see `04-ARKIV-RAPPORT.md`) |
 | ODDS-02 | Phase 4 | Complete |
-| BT-01 | Phase 5 | Pending |
-| BT-02 | Phase 5 | Pending |
+| BT-01 | Phase 5 | Complete |
+| BT-02 | Phase 5 | Complete |
 | BT-03 | Phase 5 | Complete |
 | BT-04 | Phase 5 | Pending |
 | BT-05 | Phase 5 | Pending |
