@@ -38,7 +38,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **BT-04**: ROI, win rate, and max drawdown are reported on the flagged-bet subset only, with bet count and a confidence interval attached to every headline number
 - [x] **BT-05**: Each backtest run produces a reproducible, versioned run manifest (config + date range + metrics), enabling a clear before/after comparison against the current losing live configuration
 - [x] **BT-06**: Closing Line Value (CLV) is tracked per bet and in aggregate, as a faster-converging signal of genuine edge than raw ROI
-- [ ] **BT-07**: A Kelly-fraction sensitivity sweep (flat / quarter / half / full) shows how sensitive reported ROI is to the staking assumption, validating whether half-Kelly is actually the right choice
+- [x] **BT-07**: A Kelly-fraction sensitivity sweep (flat / quarter / half / full) shows how sensitive reported ROI is to the staking assumption, validating whether half-Kelly is actually the right choice
 
 ## v2 Requirements
 
@@ -89,7 +89,7 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 | BT-04 | Phase 5 | Complete |
 | BT-05 | Phase 5 | Complete |
 | BT-06 | Phase 5 | Complete |
-| BT-07 | Phase 5 | Pending |
+| BT-07 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 18 total

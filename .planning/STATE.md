@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-08-PLAN.md
-last_updated: "2026-08-27T11:55:06.274Z"
+stopped_at: Completed 05-09-PLAN.md
+last_updated: "2026-08-27T12:13:11.190Z"
 last_activity: 2026-08-27
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 35
-  completed_plans: 30
+  completed_plans: 31
   percent: 80
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
-Plan: 9 of 13
+Plan: 10 of 13
 Status: Ready to execute
 Last activity: 2026-08-27
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -83,6 +83,7 @@ Progress: [█████████░] 86%
 | Phase 05 P06 | 35min | 3 tasks | 2 files |
 | Phase 05 P07 | 14min | 3 tasks | 3 files |
 | Phase 05 PP08 | 55min | 3 tasks | 3 files |
+| Phase 05 P09 | ~20min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -151,6 +152,7 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 08: implemented D-05-02/D-05-03 recommended options as written -- two-metric-set manifest (full-period headline + ex-burn-in sensitivity check) and a backtest.py-local 2% flat-stake branch, strategy.py/metrics.py/config.py untouched
 - [Phase 05]: Plan 08: settlement batched per simulated kamp_dato, never per bet, mirroring 06_bot.py's settle-at-next-run ordering -- ledger's saldo_for column makes BT-02 auditable straight from ledger.csv
 - [Phase 05]: Plan 08: fixed a real-data-only bug where xgboost's numpy.float32 predict_proba output leaked into the manifest's sluttsaldo, breaking json.dump -- innsats cast to float() immediately after staking (T-05-08-09)
+- [Phase ?]: 05-09: Fixed a signature mismatch (Rule 1) in the plan's suggested oppsummer_ledger(*hent_metrikkserier(...)) call — startkapital and clv_verdier landed in swapped positions; unpacked explicitly and passed clv_verdier as a keyword, matching bygg_manifest's existing pattern
 
 ### Pending Todos
 
@@ -172,6 +174,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T11:55:06.265Z
-Stopped at: Completed 05-08-PLAN.md
+Last session: 2026-08-27T12:13:11.182Z
+Stopped at: Completed 05-09-PLAN.md
 Resume file: None
