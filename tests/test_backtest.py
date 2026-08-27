@@ -1326,3 +1326,147 @@ def test_kelly_sweep_er_json_serialiserbar():
     preds = [lag_prediksjon(hjemme_vant=1)]
     sweep = backtest.kjor_kelly_sweep(preds, skriv_ut=False)
     json.dumps(sweep)
+
+
+def test_skriv_kelly_sweep_lager_fil_i_kjoringskatalogen(tmp_path):
+    run_id = "20260827-120000-deadbeef"
+    os.makedirs(os.path.join(str(tmp_path), run_id))
+    sweep = backtest.kjor_kelly_sweep([lag_prediksjon(hjemme_vant=1)], run_id=run_id, skriv_ut=False)
+
+    sti = backtest.skriv_kelly_sweep(run_id, sweep, katalog=str(tmp_path))
+    assert sti == os.path.join(str(tmp_path), run_id, backtest.SWEEP_FIL)
+    assert os.path.exists(sti)
+
+
+def test_skriv_kelly_sweep_krever_eksisterende_kjoring(tmp_path):
+    run_id = "20260827-120000-deadbeef"
+    sweep = backtest.kjor_kelly_sweep([], run_id=run_id, skriv_ut=False)
+    with pytest.raises(FileNotFoundError):
+        backtest.skriv_kelly_sweep(run_id, sweep, katalog=str(tmp_path))
+
+
+def test_skriv_kelly_sweep_overskriver_aldri(tmp_path):
+    run_id = "20260827-120000-deadbeef"
+    os.makedirs(os.path.join(str(tmp_path), run_id))
+    sweep = backtest.kjor_kelly_sweep([], run_id=run_id, skriv_ut=False)
+
+    forste_sti = backtest.skriv_kelly_sweep(run_id, sweep, katalog=str(tmp_path))
+    with open(forste_sti, encoding="utf-8") as f:
+        forste_innhold = f.read()
+
+    with pytest.raises(FileExistsError):
+        backtest.skriv_kelly_sweep(run_id, sweep, katalog=str(tmp_path))
+
+    with open(forste_sti, encoding="utf-8") as f:
+        andre_innhold = f.read()
+    assert forste_innhold == andre_innhold
+
+
+def test_skriv_kelly_sweep_avviser_stier(tmp_path):
+    sweep = backtest.kjor_kelly_sweep([], skriv_ut=False)
+    for ugyldig in ("../hemmelig", "a/b", "20260825-120000-ZZZZZZZZ", ""):
+        with pytest.raises(ValueError):
+            backtest.skriv_kelly_sweep(ugyldig, sweep, katalog=str(tmp_path))
+
+
+def test_sweep_rundtur_gjennom_disk(tmp_path):
+    run_id = "20260827-120000-deadbeef"
+    os.makedirs(os.path.join(str(tmp_path), run_id))
+    p = lag_prediksjon(kamp="Ærlig Ø vs Åmål", hjemme_vant=1)
+    sweep = backtest.kjor_kelly_sweep([p], run_id=run_id, skriv_ut=False)
+
+    sti = backtest.skriv_kelly_sweep(run_id, sweep, katalog=str(tmp_path))
+    with open(sti, encoding="utf-8") as f:
+        lest = json.load(f)
+    assert lest == sweep
+
+
+def test_sweep_filen_navngir_kjoringen(tmp_path):
+    run_id = "20260827-120000-deadbeef"
+    os.makedirs(os.path.join(str(tmp_path), run_id))
+    sweep = backtest.kjor_kelly_sweep([lag_prediksjon(hjemme_vant=1)], run_id=run_id, skriv_ut=False)
+    backtest.skriv_kelly_sweep(run_id, sweep, katalog=str(tmp_path))
+    assert sweep["run_id"] == run_id
+
+
+def test_kjor_og_lagre_skriver_sweep_naar_flagget_er_satt(monkeypatch, tmp_path):
+    def falsk_backtest(data, **kwargs):
+        preds = [
+            lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                            bet="Hjemme (A)", side="hjemme", hjemme_vant=1),
+        ]
+        return preds, _resultat_predict(datoer_behandlet=1, kamper_totalt=1, kandidater_flagget=1)
+
+    monkeypatch.setattr(backtest, "kjor_backtest", falsk_backtest)
+
+    t1 = datetime.datetime(2026, 8, 27, 12, 0, 0)
+    t2 = datetime.datetime(2026, 8, 27, 12, 0, 1)
+
+    sti, manifest, ledger = backtest.kjor_og_lagre(
+        {}, katalog=str(tmp_path), tidspunkt=t1, kjor_sweep=True, skriv_ut=False
+    )
+    assert os.path.exists(os.path.join(sti, backtest.MANIFEST_FIL))
+    sweep_sti = os.path.join(sti, backtest.SWEEP_FIL)
+    assert os.path.exists(sweep_sti)
+    with open(sweep_sti, encoding="utf-8") as f:
+        sweep = json.load(f)
+    assert len(sweep["armer"]) == 4
+
+    sti2, manifest2, ledger2 = backtest.kjor_og_lagre(
+        {}, katalog=str(tmp_path), tidspunkt=t2, skriv_ut=False
+    )
+    assert set(os.listdir(sti2)) == {backtest.MANIFEST_FIL, backtest.LEDGER_FIL}
+
+
+def test_kjor_og_lagre_kjorer_predict_bare_en_gang_med_sweep(monkeypatch, tmp_path):
+    kalt = {"antall": 0}
+
+    def falsk_backtest(data, **kwargs):
+        kalt["antall"] += 1
+        preds = [
+            lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                            bet="Hjemme (A)", side="hjemme", hjemme_vant=1),
+        ]
+        return preds, _resultat_predict(datoer_behandlet=1, kamper_totalt=1, kandidater_flagget=1)
+
+    monkeypatch.setattr(backtest, "kjor_backtest", falsk_backtest)
+
+    sti, manifest, ledger = backtest.kjor_og_lagre(
+        {}, katalog=str(tmp_path), kjor_sweep=True, skriv_ut=False
+    )
+    assert kalt["antall"] == 1
+
+    with open(os.path.join(sti, backtest.SWEEP_FIL), encoding="utf-8") as f:
+        sweep = json.load(f)
+    assert len(sweep["armer"]) == 4
+
+
+def test_sweep_og_holdout_er_gjensidig_utelukkende(monkeypatch, tmp_path):
+    def _sprakk(*args, **kwargs):
+        raise AssertionError("verken predict-inngangen skal kalles ved en avvist kombinasjon")
+
+    monkeypatch.setattr(backtest, "kjor_backtest", _sprakk)
+    monkeypatch.setattr(backtest, "kjor_endelig_holdout_backtest", _sprakk)
+
+    with pytest.raises(ValueError):
+        backtest.kjor_og_lagre(
+            {}, holdout=True, kjor_sweep=True, katalog=str(tmp_path), skriv_ut=False
+        )
+
+    assert os.listdir(str(tmp_path)) == []
+
+
+def test_ny_kode_apner_fortsatt_ikke_holdoutvinduet():
+    kildetekst = open("backtest.py", encoding="utf-8").read()
+    holdout_kilde = inspect.getsource(backtest.kjor_endelig_holdout_backtest)
+    rest = kildetekst.replace(holdout_kilde, "")
+    rest_uten_kommentarer = "\n".join(
+        line for line in rest.splitlines() if not line.strip().startswith("#")
+    )
+    assert "tillat_holdout=True" not in rest_uten_kommentarer
+
+
+def test_backtest_rorer_fortsatt_ikke_live_tilstand():
+    kildetekst = open("backtest.py", encoding="utf-8").read()
+    for token in ("bankroll.json", "bets.json", "dashboard"):
+        assert token not in kildetekst
