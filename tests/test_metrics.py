@@ -7,6 +7,10 @@ filen kan etterregnes med papir og penn, og hver test har en kommentar som
 viser regnestykket.
 """
 
+import inspect
+import json
+import pathlib
+
 import pytest
 
 import metrics
@@ -173,3 +177,136 @@ def test_wilson_ci_kjente_verdier():
 
     sig = inspect.signature(metrics.wilson_ci)
     assert sig.parameters["z"].default == 1.96
+
+
+# ---------------------------------------------------------------------
+# beregn_clv, aggreger_clv, oppsummer_ledger (BT-06 — CLV og ledger-sammendrag)
+# ---------------------------------------------------------------------
+
+
+def test_clv_beregning():
+    # fjern_vigorish(2.00, 2.00) = (0.5, 0.5) — bet-time-paret.
+    # fjern_vigorish(1.50, 3.00) = (2/3, 1/3) — closing-paret.
+    # CLV = closing_side - bet_time_side.
+    # "hjemme": 2/3 - 0.5 = 1/6 (positiv -> bettet SLO closing-linjen).
+    resultat_hjemme = metrics.beregn_clv(2.00, 2.00, 1.50, 3.00, "hjemme")
+    assert resultat_hjemme == pytest.approx(1 / 6)
+
+    # "borte": 1/3 - 0.5 = -1/6 (negativ -> bettet ble slått av closing).
+    resultat_borte = metrics.beregn_clv(2.00, 2.00, 1.50, 3.00, "borte")
+    assert resultat_borte == pytest.approx(-1 / 6)
+
+    # Manglende closing-snapshot -> None, aldri en fabrikkert 0.0.
+    assert metrics.beregn_clv(2.00, 2.00, None, None, "hjemme") is None
+
+    # Manglende bet-time-snapshot -> None.
+    assert metrics.beregn_clv(None, None, 1.50, 3.00, "hjemme") is None
+
+
+def test_clv_bruker_delt_vigfjerning(monkeypatch):
+    """
+    Behavioural bevis for at beregn_clv ruter gjennom den delte
+    fjern_vigorish-implementasjonen, ikke en lokalt gjenskapt 1/odds. En
+    grep etter import-linjen kunne bestått selv om en lokal omregning
+    stille gjorde selve jobben — akkurat slik 05-RESEARCH.md Pitfall 4
+    (vig-fjerningsfeil som fabrikkerer falsk edge) ville gjenåpnet seg.
+    Stubben må nås via metrics.beregn_clv (modul-attributt), ikke en
+    from-metrics-import-binding tatt før patchen.
+    """
+    monkeypatch.setattr(metrics, "fjern_vigorish", lambda h, b: (0.4, 0.6))
+    resultat = metrics.beregn_clv(2.00, 2.00, 1.50, 3.00, "hjemme")
+    assert resultat == pytest.approx(0.0)
+
+
+def test_aggreger_clv_kjente_verdier():
+    # 3 kjente verdier: -1/6, 1/6, -1/6 -> snitt = (-1/6 + 1/6 - 1/6) / 3 = -1/18.
+    # Kun 1/6 er strengt positiv -> andel_slo_closing = 1/3.
+    resultat = metrics.aggreger_clv([-1 / 6, 1 / 6, None, -1 / 6])
+    assert resultat["clv_snitt"] == pytest.approx(-1 / 18)
+    assert resultat["antall_med_clv"] == 3
+    assert resultat["antall_uten_clv"] == 1
+    assert resultat["andel_slo_closing"] == pytest.approx(1 / 3)
+
+
+def test_aggreger_clv_tom():
+    forventet = {
+        "clv_snitt": None,
+        "antall_med_clv": 0,
+        "antall_uten_clv": 0,
+        "andel_slo_closing": None,
+    }
+    assert metrics.aggreger_clv([]) == forventet
+
+    resultat_kun_none = metrics.aggreger_clv([None, None])
+    assert resultat_kun_none["clv_snitt"] is None
+    assert resultat_kun_none["antall_med_clv"] == 0
+    assert resultat_kun_none["antall_uten_clv"] == 2
+    assert resultat_kun_none["andel_slo_closing"] is None
+
+
+def test_oppsummer_ledger_kjent_ledger():
+    # Samme ledger som test_beregn_roi_kjent_ledger og test_beregn_vinnrate:
+    # ROI = -0.125, vinnrate = 0.5, antall_bets = 4.
+    d = metrics.oppsummer_ledger(
+        [100.0, -100.0, 50.0, -100.0],
+        [100.0] * 4,
+        [True, False, True, False],
+        1000.0,
+    )
+    assert d["roi"] == pytest.approx(-0.125)
+    assert d["vinnrate"] == pytest.approx(0.5)
+    assert d["antall_bets"] == 4
+    assert d["bootstrap_seed"] == 42
+    assert d["bootstrap_n_resamples"] == 1000
+
+
+def test_oppsummer_ledger_er_json_serialiserbar():
+    d = metrics.oppsummer_ledger(
+        [100.0, -100.0, 50.0, -100.0],
+        [100.0] * 4,
+        [True, False, True, False],
+        1000.0,
+    )
+    json.dumps(d)  # skal ikke kaste TypeError på numpy.float64 e.l.
+
+
+def test_oppsummer_ledger_tom():
+    d = metrics.oppsummer_ledger([], [], [], 1000.0)
+    assert d["antall_bets"] == 0
+    assert d["roi"] == 0.0
+    assert d["vinnrate"] == 0.0
+    assert d["clv_snitt"] is None
+
+
+def test_oppsummer_ledger_ulik_lengde_reiser_feil():
+    with pytest.raises(ValueError):
+        metrics.oppsummer_ledger([100.0, -100.0], [100.0], [True, False], 1000.0)
+
+
+def test_metrics_er_ren_uten_io_og_uten_scipy():
+    """
+    metrics.py skal være et rent rapporteringslag hvis testbarhet avhenger
+    av at ALT kommer inn som parametre — derfor ingen open()/to_csv() noe
+    sted i filen. Wilson z-scoren er dessuten hardkodet nettopp for å
+    unngå scipy: pakken finnes transitivt i venv-en, men er bevisst
+    fraværende fra requirements.txt, så en import her ville skapt en
+    udeklarert kjøretidsavhengighet som virker på denne maskinen og
+    feiler på en fersk klone.
+    """
+    kilde = (pathlib.Path(__file__).resolve().parent.parent / "metrics.py").read_text(
+        encoding="utf-8"
+    )
+    assert "open(" not in kilde
+    assert "to_csv" not in kilde
+
+    forbudte_prefikser = (
+        "import scipy",
+        "from scipy",
+        "import config",
+        "from config",
+        "import pandas",
+        "from pandas",
+    )
+    for linje in kilde.splitlines():
+        stripped = linje.strip()
+        assert not any(stripped.startswith(p) for p in forbudte_prefikser), stripped

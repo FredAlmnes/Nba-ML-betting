@@ -219,3 +219,170 @@ def wilson_ci(antall_vunnet, antall_totalt, z=1.96):
     oevre = min(1.0, senter + halvbredde)
 
     return float(p), float(nedre), float(oevre)
+
+
+# ---------------------------------------------------------------------
+# CLV (Closing Line Value) og aggregert ledger-oppsummering (BT-06)
+# ---------------------------------------------------------------------
+
+
+def beregn_clv(odds_bet_time_hjemme, odds_bet_time_borte, odds_closing_hjemme,
+                odds_closing_borte, side):
+    """
+    Closing Line Value — vig-frie implisitte sannsynligheter, closing MINUS
+    bet-time, for siden bettet faktisk lå på.
+
+    Fortegnet er låst i 05-CONTEXT.md og MÅ IKKE snus: et POSITIVT tall
+    betyr at bettet slo closing-linjen. Grunnen: å få en bedre pris enn
+    closing betyr at bet-time-sannsynligheten var LAVERE enn closing-
+    sannsynligheten, så closing - bet_time blir positiv nettopp når prisen
+    var bedre. Eksempel denne modulen pinner: bet hjemme på 2.00 (vig-fri
+    0.500), kampen lukker på 1.50 (vig-fri 0.667) — en klart bedre pris —
+    gir 0.667 - 0.500 = +0.167.
+
+    Bruker fjern_vigorish TO GANGER — én gang på bet-time-paret, én gang på
+    closing-paret — aldri en lokal 1/odds-normalisering. Dette er den eneste
+    veien inn til vig-fjerning i hele repoet; en lokal omregning her ville
+    stille gjenåpnet risikoen for at value-tallet og CLV-tallet regner ut
+    to ulike (og potensielt uenige) vig-frie sannsynligheter fra samme odds.
+
+    `side` er det kanoniske tokenet "hjemme" eller "borte" — IKKE ledgerens
+    visningsstreng (f.eks. "Hjemme (Lakers)"). Kalleren i plan 05-08 har
+    ansvaret for å oversette til dette tokenet før kall.
+
+    Returnerer None umiddelbart hvis noen av de fire odds-verdiene er None
+    eller falsy — et manglende closing-snapshot er fraværende data, aldri
+    en fabrikkert 0.0 (samme skip-og-logg-disiplin som 05-RESEARCH.md
+    Pitfall 2, anvendt på rapporteringslaget).
+    """
+    if not odds_bet_time_hjemme or not odds_bet_time_borte:
+        return None
+    if not odds_closing_hjemme or not odds_closing_borte:
+        return None
+
+    impl_bet_time_hjemme, impl_bet_time_borte = fjern_vigorish(
+        odds_bet_time_hjemme, odds_bet_time_borte
+    )
+    impl_closing_hjemme, impl_closing_borte = fjern_vigorish(
+        odds_closing_hjemme, odds_closing_borte
+    )
+
+    if side == "hjemme":
+        impl_bet_time_side = impl_bet_time_hjemme
+        impl_closing_side = impl_closing_hjemme
+    else:
+        impl_bet_time_side = impl_bet_time_borte
+        impl_closing_side = impl_closing_borte
+
+    return float(impl_closing_side - impl_bet_time_side)
+
+
+def aggreger_clv(clv_verdier):
+    """
+    Aggregerer en sekvens av per-bet CLV-verdier (som kan inneholde None
+    der closing-snapshot manglet) til en oppsummering.
+
+    Kamper uten closing-snapshot TELLES, ikke droppes stille — en stor
+    antall_uten_clv er selv et data-kvalitetsfunn plan 05-08 må vise frem i
+    manifest.json ved siden av det manglende-odds-skip-tallet.
+
+    andel_slo_closing er andelen ikke-None-verdier som er STRENGT større
+    enn null, og leses som "andel bets som slo closing" nettopp fordi den
+    er definert på clv > 0 — dette feltet er entydig i retning uansett
+    hvilken fortegns-konvensjon en leser husker feil, og er derfor
+    følgesvennen til den låste closing-minus-bet-time-orienteringen, ikke
+    en erstatning for den.
+
+    Returnerer dict med clv_snitt=None og andel_slo_closing=None (og
+    tellerne 0) når det ikke finnes noen ikke-None-verdier.
+    """
+    kjente = [v for v in clv_verdier if v is not None]
+    antall_med_clv = len(kjente)
+    antall_uten_clv = len(clv_verdier) - antall_med_clv
+
+    if antall_med_clv == 0:
+        return {
+            "clv_snitt": None,
+            "antall_med_clv": 0,
+            "antall_uten_clv": antall_uten_clv,
+            "andel_slo_closing": None,
+        }
+
+    clv_snitt = sum(kjente) / antall_med_clv
+    antall_slo_closing = sum(1 for v in kjente if v > 0)
+    andel_slo_closing = antall_slo_closing / antall_med_clv
+
+    return {
+        "clv_snitt": float(clv_snitt),
+        "antall_med_clv": antall_med_clv,
+        "antall_uten_clv": antall_uten_clv,
+        "andel_slo_closing": float(andel_slo_closing),
+    }
+
+
+def oppsummer_ledger(profitter, innsatser, vant_flagg, startkapital, clv_verdier=None,
+                      n_resamples=1000, seed=42):
+    """
+    Den ene aggregerings-inngangen plan 05-08 og plan 05-09 kaller — setter
+    sammen alle de andre funksjonene i denne modulen til ett flatt,
+    JSON-serialiserbart dict. Regner aldri ut noe aritmetikk selv, kun
+    komposisjon av de allerede testede funksjonene ovenfor.
+
+    Tre kontrakter senere planer avhenger av:
+
+    1. Funksjonen er HELT dato-uvitende — den filtrerer aldri på dato — så
+       plan 05-08 kan kalle den flere ganger over ulike dato-filtrerte
+       delmengder av samme cachede ledger for å produsere det hovedtall-
+       settet D-05-02 låste (full periode, og — hvis alternativ a ble
+       valgt — ex-burn-in-sensitivitetsparet), til tilnærmet null
+       merkostnad.
+    2. bootstrap_seed og bootstrap_n_resamples returneres, ikke bare
+       brukes, fordi BT-05s reproduserbare manifest trenger de eksakte
+       verdiene som produserte konfidensintervallet ved siden av det.
+    3. Hver verdi i det returnerte dict-et er en ren Python-skalar, slik at
+       kalleren kan serialisere dict-et rett inn i manifest.json uten
+       konvertering.
+
+    Kaster ValueError når profitter/innsatser/vant_flagg har ulik lengde —
+    en lengdeforskjell betyr en korrupt ledger. En tom ledger returnerer
+    antall_bets=0 med nullstilte/None-verdier i stedet for å kaste.
+    """
+    if len(profitter) != len(innsatser) or len(profitter) != len(vant_flagg):
+        raise ValueError(
+            "profitter, innsatser og vant_flagg må ha samme lengde — ledgeren er korrupt"
+        )
+
+    roi, roi_ci_nedre, roi_ci_oevre = bootstrap_roi_ci(
+        profitter, innsatser, n_resamples=n_resamples, seed=seed
+    )
+    vinnrate, antall_vunnet, antall_totalt = beregn_vinnrate(vant_flagg)
+    _, vinnrate_ci_nedre, vinnrate_ci_oevre = wilson_ci(antall_vunnet, antall_totalt)
+    maks_drawdown_kroner, maks_drawdown_andel = beregn_maks_drawdown(profitter, startkapital)
+
+    if clv_verdier is None:
+        clv_sammendrag = {
+            "clv_snitt": None,
+            "antall_med_clv": 0,
+            "antall_uten_clv": 0,
+            "andel_slo_closing": None,
+        }
+    else:
+        clv_sammendrag = aggreger_clv(clv_verdier)
+
+    return {
+        "antall_bets": antall_totalt,
+        "sum_innsats": float(sum(innsatser)),
+        "sum_profitt": float(sum(profitter)),
+        "roi": roi,
+        "roi_ci_nedre": roi_ci_nedre,
+        "roi_ci_oevre": roi_ci_oevre,
+        "vinnrate": vinnrate,
+        "antall_vunnet": antall_vunnet,
+        "vinnrate_ci_nedre": vinnrate_ci_nedre,
+        "vinnrate_ci_oevre": vinnrate_ci_oevre,
+        "maks_drawdown_kroner": maks_drawdown_kroner,
+        "maks_drawdown_andel": maks_drawdown_andel,
+        "bootstrap_seed": seed,
+        "bootstrap_n_resamples": n_resamples,
+        **clv_sammendrag,
+    }
