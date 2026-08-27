@@ -8,7 +8,9 @@ avhengighet av den ekte `odds_arkiv.db` eller `nba_features.csv`, som
 speiler `tests/test_parity.py` sin egen docstring-disiplin.
 """
 
+import datetime
 import inspect
+import json
 import os
 
 import pandas as pd
@@ -761,3 +763,322 @@ def test_ledger_er_sortert_kronologisk():
     assert [rad["kamp_dato"] for rad in ledger] == ["2022-11-10", "2022-11-12"]
     saldoer = [rad["saldo_etter_dato"] for rad in ledger]
     assert saldoer == sorted(saldoer)
+
+
+# --- 5. Kjøre-id, manifest og persistering (plan 05-08 Task 2) ---
+
+
+def _resultat_predict(**overstyr):
+    """Hånd-laget predict-pass-teller-dict, samme nøkler som kjor_backtest returnerer."""
+    resultat = {
+        "fra_dato": "2022-11-01",
+        "til_dato": "2022-11-30",
+        "datoer_totalt": 10,
+        "datoer_behandlet": 8,
+        "datoer_hoppet_over_for_lite_treningsgrunnlag": 2,
+        "kamper_totalt": 40,
+        "kamper_hoppet_over_manglende_odds": 1,
+        "kamper_hoppet_over_ukjent_lag": 0,
+        "kamper_uten_closing_snapshot": 1,
+        "kandidater_flagget": 12,
+        "kandidater_blokkert_av_skadefilter": 3,
+        "skadesjekk_uten_datagrunnlag": 0,
+        "retreninger": 1,
+        "prediksjoner": 9,
+        "min_treningskamper": backtest.MIN_TRENINGSKAMPER,
+        "kalibrer_andel": model.KALIBRER_ANDEL,
+        "min_value_terskel": config.MIN_VALUE_TERSKEL,
+        "min_odds": config.MIN_ODDS,
+        "maks_odds": config.MAX_ODDS,
+        "skadefilter_aktiv": True,
+    }
+    resultat.update(overstyr)
+    return resultat
+
+
+def _resultat_sim(**overstyr):
+    """Hånd-laget simuleringspass-teller-dict, samme nøkler som simuler_bets returnerer."""
+    resultat = {
+        "startkapital": config.STARTKAPITAL,
+        "kelly_fraksjon": config.KELLY_FRAKSJON,
+        "flat_innsats": None,
+        "min_innsats": config.MIN_INNSATS,
+        "maks_innsats": config.MAX_INNSATS,
+        "kandidater_totalt": 9,
+        "bets_plassert": 6,
+        "kandidater_uten_kelly_edge": 1,
+        "bets_hoppet_over_duplikat": 0,
+        "bets_uten_utfall": 0,
+        "datoer_stoppet_lav_bankroll": 0,
+        "bets_uten_clv": 1,
+        "sluttsaldo": 1050.0,
+    }
+    resultat.update(overstyr)
+    return resultat
+
+
+def _ledger_liten():
+    """
+    Bygger en liten ledger via simuler_bets (plan 05-08 Task 1, allerede
+    dekket av sin egen test-banner) over tre datoer i to ulike kalendermåneder
+    -- ingen fil-I/O, ingen modell, ingen arkiv involvert.
+    """
+    preds = [
+        lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                        bet="Hjemme (A)", side="hjemme", hjemme_vant=1),
+        lag_prediksjon(kamp_dato="2022-11-15", game_id="2", kamp="C vs D",
+                        bet="Hjemme (C)", side="hjemme", hjemme_vant=0,
+                        odds_closing_hjemme=None, odds_closing_borte=None),
+        lag_prediksjon(kamp_dato="2022-12-01", game_id="3", kamp="E vs F",
+                        bet="Hjemme (E)", side="hjemme", hjemme_vant=1),
+    ]
+    return backtest.simuler_bets(preds, skriv_ut=False)
+
+
+def test_manifest_inneholder_konfig_og_metrikker():
+    ledger, resultat_sim = _ledger_liten()
+    resultat_predict = _resultat_predict()
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    manifest = backtest.bygg_manifest(
+        "20260825-120000-deadbeef", konfig, resultat_predict, resultat_sim, ledger
+    )
+
+    assert {"run_id", "opprettet", "type", "headline", "konfig", "periode",
+            "datakvalitet", "metrikker"} <= set(manifest)
+    assert {
+        "min_value_terskel", "min_odds", "maks_odds", "kelly_fraksjon", "flat_innsats",
+        "startkapital", "min_innsats", "maks_innsats", "min_treningskamper", "kalibrer_andel",
+        "retrenings_kadens", "holdout_start_dato", "skadefilter_aktiv", "bootstrap_seed",
+        "bootstrap_n_resamples",
+    } <= set(manifest["konfig"])
+    assert {
+        "roi", "vinnrate", "maks_drawdown_kroner", "antall_bets", "roi_ci_nedre",
+        "roi_ci_oevre", "vinnrate_ci_nedre", "vinnrate_ci_oevre",
+    } <= set(manifest["metrikker"])
+
+
+def test_run_id_har_laast_format():
+    import re
+    t = datetime.datetime(2026, 8, 25, 12, 0, 0)
+    run_id = backtest.bygg_run_id({"a": 1}, t)
+    assert re.fullmatch(r"\d{8}-\d{6}-[0-9a-f]{8}", run_id)
+
+
+def test_run_id_skiller_ulik_konfig():
+    t = datetime.datetime(2026, 8, 25, 12, 0, 0)
+    a = backtest.bygg_run_id({"kelly_fraksjon": 0.5}, t)
+    b = backtest.bygg_run_id({"kelly_fraksjon": 0.25}, t)
+    assert a != b
+
+
+def test_run_id_er_stabil_for_lik_konfig_og_tid():
+    t = datetime.datetime(2026, 8, 25, 12, 0, 0)
+    a = backtest.bygg_run_id({"a": 1, "b": 2}, t)
+    b = backtest.bygg_run_id({"a": 1, "b": 2}, t)
+    c = backtest.bygg_run_id({"b": 2, "a": 1}, t)
+    assert a == b == c
+
+
+def test_run_id_endres_med_tidsstempel():
+    t1 = datetime.datetime(2026, 8, 25, 12, 0, 0)
+    t2 = datetime.datetime(2026, 8, 25, 12, 0, 1)
+    a = backtest.bygg_run_id({"a": 1}, t1)
+    b = backtest.bygg_run_id({"a": 1}, t2)
+    assert a != b
+
+
+def test_valider_run_id_avviser_stier():
+    for ugyldig in ("../hemmelig", "a/b", "20260825-120000-ZZZZZZZZ", ""):
+        with pytest.raises(ValueError):
+            backtest._valider_run_id(ugyldig)
+
+
+def test_skriv_kjoring_lager_katalog_og_begge_filer(tmp_path):
+    ledger, resultat_sim = _ledger_liten()
+    resultat_predict = _resultat_predict()
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    run_id = backtest.bygg_run_id(konfig, datetime.datetime(2026, 8, 25, 12, 0, 0))
+    manifest = backtest.bygg_manifest(run_id, konfig, resultat_predict, resultat_sim, ledger)
+
+    sti = backtest.skriv_kjoring(run_id, manifest, ledger, katalog=str(tmp_path))
+
+    assert os.path.exists(os.path.join(sti, backtest.MANIFEST_FIL))
+    assert os.path.exists(os.path.join(sti, backtest.LEDGER_FIL))
+    assert sti.endswith(run_id)
+
+
+def test_skriv_kjoring_overskriver_aldri_eksisterende_kjoring(tmp_path):
+    ledger, resultat_sim = _ledger_liten()
+    resultat_predict = _resultat_predict()
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    run_id = backtest.bygg_run_id(konfig, datetime.datetime(2026, 8, 25, 12, 0, 0))
+    manifest = backtest.bygg_manifest(run_id, konfig, resultat_predict, resultat_sim, ledger)
+
+    sti = backtest.skriv_kjoring(run_id, manifest, ledger, katalog=str(tmp_path))
+    manifest_sti = os.path.join(sti, backtest.MANIFEST_FIL)
+    innhold_for = open(manifest_sti, encoding="utf-8").read()
+
+    with pytest.raises(FileExistsError):
+        backtest.skriv_kjoring(run_id, manifest, ledger, katalog=str(tmp_path))
+
+    assert open(manifest_sti, encoding="utf-8").read() == innhold_for
+
+
+def test_manifest_er_json_serialiserbar():
+    ledger, resultat_sim = _ledger_liten()
+    resultat_predict = _resultat_predict()
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    manifest = backtest.bygg_manifest(
+        "20260825-120000-deadbeef", konfig, resultat_predict, resultat_sim, ledger
+    )
+    json.dumps(manifest)
+
+
+def test_manifest_rundtur_gjennom_disk(tmp_path):
+    preds = [
+        lag_prediksjon(kamp_dato="2022-11-10", game_id="1",
+                        kamp="Ørn Ålesund vs Blåbær IL", bet="Hjemme (Ørn Ålesund)",
+                        side="hjemme", hjemme_vant=1),
+    ]
+    ledger, resultat_sim = backtest.simuler_bets(preds, skriv_ut=False)
+    resultat_predict = _resultat_predict()
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    run_id = backtest.bygg_run_id(konfig, datetime.datetime(2026, 8, 25, 12, 0, 0))
+    manifest = backtest.bygg_manifest(run_id, konfig, resultat_predict, resultat_sim, ledger)
+
+    sti = backtest.skriv_kjoring(run_id, manifest, ledger, katalog=str(tmp_path))
+    lest = json.load(open(os.path.join(sti, backtest.MANIFEST_FIL), encoding="utf-8"))
+    assert lest == manifest
+
+
+def test_ledger_csv_har_laaste_kolonner_i_rekkefolge(tmp_path):
+    ledger, resultat_sim = _ledger_liten()
+    resultat_predict = _resultat_predict()
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    run_id = backtest.bygg_run_id(konfig, datetime.datetime(2026, 8, 25, 12, 0, 0))
+    manifest = backtest.bygg_manifest(run_id, konfig, resultat_predict, resultat_sim, ledger)
+    sti = backtest.skriv_kjoring(run_id, manifest, ledger, katalog=str(tmp_path))
+
+    with open(os.path.join(sti, backtest.LEDGER_FIL), encoding="utf-8") as f:
+        header = f.readline().strip()
+    assert header == ",".join(backtest.LEDGER_KOLONNER)
+
+
+def test_tom_ledger_skriver_header_og_manifest(tmp_path):
+    ledger, resultat_sim = backtest.simuler_bets([], skriv_ut=False)
+    resultat_predict = _resultat_predict(
+        datoer_behandlet=0, kamper_totalt=0, kandidater_flagget=0
+    )
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    run_id = backtest.bygg_run_id(konfig, datetime.datetime(2026, 8, 25, 12, 0, 0))
+    manifest = backtest.bygg_manifest(run_id, konfig, resultat_predict, resultat_sim, ledger)
+    sti = backtest.skriv_kjoring(run_id, manifest, ledger, katalog=str(tmp_path))
+
+    with open(os.path.join(sti, backtest.LEDGER_FIL), encoding="utf-8") as f:
+        linjer = f.readlines()
+    assert linjer[0].strip() == ",".join(backtest.LEDGER_KOLONNER)
+    assert len(linjer) == 1
+    assert manifest["metrikker"]["antall_bets"] == 0
+
+
+def test_manifest_folger_d_05_02_rapporteringspolicy():
+    """
+    D-05-02 låste alternativ a: begge metrikk-sett rapporteres (full periode
+    OG ekskludert de første månedene), med et eksplisitt headline-felt som
+    navngir full-periode-settet som hovedtallet.
+    """
+    ledger, resultat_sim = _ledger_liten()
+    resultat_predict = _resultat_predict()
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    manifest = backtest.bygg_manifest(
+        "20260825-120000-deadbeef", konfig, resultat_predict, resultat_sim, ledger
+    )
+
+    assert manifest["headline"] == "metrikker"
+    assert "roi" in manifest["metrikker"] and "antall_bets" in manifest["metrikker"]
+    assert "metrikker_uten_innbrenning" in manifest
+    assert "roi" in manifest["metrikker_uten_innbrenning"]
+    assert "antall_bets" in manifest["metrikker_uten_innbrenning"]
+    assert "innbrenning_maaneder" in manifest
+
+
+def test_filtrer_ledger_etter_innbrenning_bruker_distinkte_maneder():
+    ledger = [
+        {"kamp_dato": "2022-10-25"}, {"kamp_dato": "2022-10-28"},
+        {"kamp_dato": "2022-11-05"},
+        {"kamp_dato": "2023-01-10"}, {"kamp_dato": "2023-01-15"},
+    ]
+    filtrert = backtest.filtrer_ledger_etter_innbrenning(ledger, 2)
+    assert {r["kamp_dato"] for r in filtrert} == {"2023-01-10", "2023-01-15"}
+
+
+def test_konfig_snapshot_speiler_config_modulen():
+    resultat_predict = _resultat_predict()
+    resultat_sim = _resultat_sim()
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    assert konfig["min_value_terskel"] == config.MIN_VALUE_TERSKEL
+    assert konfig["min_odds"] == config.MIN_ODDS
+    assert konfig["maks_odds"] == config.MAX_ODDS
+    assert konfig["kelly_fraksjon"] == config.KELLY_FRAKSJON
+    assert konfig["startkapital"] == config.STARTKAPITAL
+    assert konfig["min_innsats"] == config.MIN_INNSATS
+    assert konfig["maks_innsats"] == config.MAX_INNSATS
+    assert konfig["holdout_start_dato"] == config.HOLDOUT_START_DATO
+
+
+def test_manifest_bevarer_bootstrap_seed():
+    ledger, resultat_sim = _ledger_liten()
+    resultat_predict = _resultat_predict()
+    konfig = backtest.bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    assert konfig["bootstrap_seed"] == 42
+    assert konfig["bootstrap_n_resamples"] == 1000
+    manifest = backtest.bygg_manifest(
+        "20260825-120000-deadbeef", konfig, resultat_predict, resultat_sim, ledger
+    )
+    assert manifest["metrikker"]["bootstrap_seed"] == konfig["bootstrap_seed"]
+
+
+def test_backtest_rorer_aldri_live_tilstand():
+    kildetekst = open("backtest.py", encoding="utf-8").read()
+    for token in ("bankroll.json", "bets.json", "dashboard"):
+        assert token not in kildetekst
+
+
+def test_kjor_og_lagre_bruker_holdout_inngangen(monkeypatch, tmp_path):
+    kalt = {"backtest": 0, "holdout": 0}
+
+    def falsk_backtest(data, **kwargs):
+        kalt["backtest"] += 1
+        return [], _resultat_predict(datoer_behandlet=0, kamper_totalt=0, kandidater_flagget=0)
+
+    def falsk_holdout(data, **kwargs):
+        kalt["holdout"] += 1
+        return [], _resultat_predict(datoer_behandlet=0, kamper_totalt=0, kandidater_flagget=0)
+
+    monkeypatch.setattr(backtest, "kjor_backtest", falsk_backtest)
+    monkeypatch.setattr(backtest, "kjor_endelig_holdout_backtest", falsk_holdout)
+
+    t1 = datetime.datetime(2026, 8, 25, 12, 0, 0)
+    t2 = datetime.datetime(2026, 8, 25, 12, 0, 1)
+
+    sti, manifest, ledger = backtest.kjor_og_lagre(
+        {}, holdout=True, katalog=str(tmp_path), tidspunkt=t1, skriv_ut=False
+    )
+    assert kalt == {"backtest": 0, "holdout": 1}
+    assert manifest["type"] == "holdout"
+
+    sti2, manifest2, ledger2 = backtest.kjor_og_lagre(
+        {}, holdout=False, katalog=str(tmp_path), tidspunkt=t2, skriv_ut=False
+    )
+    assert kalt == {"backtest": 1, "holdout": 1}
+    assert manifest2["type"] == "tuning"
+
+
+def test_ny_kode_apner_ikke_holdoutvinduet():
+    kildetekst = open("backtest.py", encoding="utf-8").read()
+    holdout_kilde = inspect.getsource(backtest.kjor_endelig_holdout_backtest)
+    rest = kildetekst.replace(holdout_kilde, "")
+    rest_uten_kommentarer = "\n".join(
+        line for line in rest.splitlines() if not line.strip().startswith("#")
+    )
+    assert "tillat_holdout=True" not in rest_uten_kommentarer
