@@ -188,7 +188,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 05-06-PLAN.md — skadefilter.py: sesong_grenser_for_dato + sjekk_lag_helse_som_of (as-of skadefilter)
+- [x] 05-06-PLAN.md — skadefilter.py: sesong_grenser_for_dato + sjekk_lag_helse_som_of (as-of skadefilter)
 
 **Wave 5** *(blocked on Wave 4)*
 
@@ -226,4 +226,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 9/9 | Complete   | 2026-08-24 |
-| 5. Walk-Forward Backtest Engine | 5/13 | In Progress|  |
+| 5. Walk-Forward Backtest Engine | 6/13 | In Progress|  |

@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-08-27T10:39:37.513Z"
+last_updated: "2026-08-27T10:49:23.359Z"
 last_activity: 2026-08-27
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 35
-  completed_plans: 27
-  percent: 77
+  completed_plans: 28
+  percent: 80
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
-Plan: 6 of 13
+Plan: 7 of 13
 Status: Ready to execute
 Last activity: 2026-08-27
 
-Progress: [████████░░] 77%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -80,6 +80,7 @@ Progress: [████████░░] 77%
 | Phase 05 P03 | 35min | 3 tasks | 2 files |
 | Phase 05 P04 | 20min | 3 tasks | 3 files |
 | Phase 05 P05 | 22min | 3 tasks | 3 files |
+| Phase 05 P06 | 35min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 04: no public snapshot_type parameter anywhere -- hent_bet_time_pris and hent_closing_pris each bind their own literal, making decision code structurally unable to reach a closing price by passing an argument (BT-02)
 - [Phase 05]: Plan 05: test fixture bug (float64->object dtype assignment) fixed in test_normaliser_null_minutter_blir_null_float, no change to spillerlogg.py's own MIN coercion logic
 - [Phase 05]: Plan 05: real 3-season nba_api fetch landed nba_spillerlogg_raw.csv on first attempt (78,602 rows, 2022-10-18 to 2025-04-13, 771 distinct players) -- no retry needed, closing Pitfall 1's data gap for plan 05-06's injury filter
+- [Phase 05]: Plan 06: corrected 05-RESEARCH.md Pattern 7's per-player tail(3) recency window to the team's last SISTE_N_KAMPER distinct game dates -- the draft would have made the injury filter structurally unable to flag anyone (any player with 3 season appearances always scored GP==3)
+- [Phase 05]: Plan 06: sjekk_lag_helse_som_of reuses MIN_MINUTTER/ANTALL_TOPPSPILLERE/sjekk_spiller unmodified from the live path, adds antall_toppspillere/antall_kamprader diagnostic counters so backtest.py can report vacuous checks instead of absorbing them as healthy
 
 ### Pending Todos
 
@@ -162,6 +165,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T10:39:37.505Z
+Last session: 2026-08-27T10:48:44.685Z
 Stopped at: Completed 05-05-PLAN.md
 Resume file: None
