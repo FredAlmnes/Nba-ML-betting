@@ -55,6 +55,45 @@ python 04_value_detector.py
 ```
 Lager filen `value_bets_idag.csv`
 
+### Steg 8: Kjør backtesten
+
+**Forutsetninger:** `08_kjor_backtest.py` leser tre filer: `nba_features.csv` (steg 2),
+`odds_arkiv.db` (`07_hent_historisk_odds.py`) og `nba_spillerlogg_raw.csv`
+(`spillerlogg.py`). Stegene 5-7 (odds-arkivering, spillerlogg-henting,
+skadefilter-integrasjon) er ikke skrevet opp i denne guiden ennå — mangler du
+en av de tre filene er det et hull i denne dokumentasjonen, ikke en ødelagt
+installasjon.
+
+```bash
+python 08_kjor_backtest.py
+```
+Lager filen `backtests/<run_id>/manifest.json` og `backtests/<run_id>/ledger.csv`.
+Uten `--fra`/`--til` kjører den hele train/calibrate-slicen — fra første dato
+i `nba_features.csv` til og med **dagen før** holdout-sesongen starter — og
+den rører derfor aldri 2024-25-sesongen. Det fulle løpet tar noen minutter
+fordi modellen gjenoppretrenes én gang per måned; bruk det avgrensede vinduet
+under for billig iterasjon mens du prøver en endring.
+
+```bash
+python 08_kjor_backtest.py --sweep
+```
+Kjører det samme, og skriver i tillegg `kelly_sweep.json` med flat/kvart/halv/
+full-Kelly-sammenligningen fra samme predict-pass.
+
+```bash
+python 08_kjor_backtest.py --fra 2022-11-15 --til 2022-11-30
+```
+Dette er den billige måten å prøve en endring på før du forplikter deg til
+det fulle train/calibrate-løpet over.
+
+⚠️ **Advarsel om holdouten**: 2024-25-sesongen er en LÅST holdout. Den
+sjekkes **nøyaktig én gang** for hele prosjektet, etter at hver terskel- og
+Kelly-beslutning allerede er frosset. Den nås kun ved å gi både `--holdout`
+og bekreftelsesflagget som heter bekreft-holdout. Det finnes ingen måte å
+bruke den opp på nytt — en andre kjøring ville ikke lenger vært en ærlig
+out-of-sample-test. `run_id`-en fra den kjøringen må skrives inn i
+`.planning/STATE.md` slik at en senere økt ser at holdouten er brukt.
+
 ---
 
 ## Hva betyr resultatene?
@@ -86,7 +125,7 @@ vil positiv forventet verdi gi profitt.
 - Legg til "back-to-back"-faktor (spiller de kamp 2 dager på rad?)
 - Legg til hviledag-statistikk
 - Bruk Kelly Criterion for å beregne optimal innsatsstørrelse
-- Backtesting – test modellen historisk for å se lønnsomhet
+- Backtesting – implementert, se Steg 8 over
 
 ---
 

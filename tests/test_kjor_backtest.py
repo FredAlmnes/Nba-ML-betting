@@ -358,3 +358,43 @@ def test_cli_rorer_ikke_live_tilstand():
     assert "bankroll.json" not in kilde
     assert "bets.json" not in kilde
     assert "dashboard" not in kilde
+
+
+# ---------------------------------------------------------------------------
+# 3. Ekte, men billig, CLI-drevet løp (Task 3)
+# ---------------------------------------------------------------------------
+
+
+_MANGLER_EKTE_DATA = (
+    not os.path.exists("nba_features.csv")
+    or not os.path.exists("odds_arkiv.db")
+    or not os.path.exists("nba_spillerlogg_raw.csv")
+)
+
+
+@pytest.mark.skipif(
+    _MANGLER_EKTE_DATA,
+    reason="nba_features.csv/odds_arkiv.db/nba_spillerlogg_raw.csv finnes ikke - "
+           "en fersk klone har ingen av dem",
+)
+def test_ekte_cli_kjoring_skriver_manifest_og_ledger(tmp_path):
+    resultat = _kjor_cli([
+        "--fra", "2022-11-15", "--til", "2022-11-30",
+        "--min-treningskamper", "100", "--stille",
+        "--katalog", str(tmp_path),
+    ])
+    assert resultat.returncode == 0, resultat.stderr
+
+    run_kataloger = [p for p in tmp_path.iterdir() if p.is_dir()]
+    assert len(run_kataloger) == 1, run_kataloger
+    run_katalog = run_kataloger[0]
+
+    filer = {p.name for p in run_katalog.iterdir()}
+    assert "manifest.json" in filer
+    assert "ledger.csv" in filer
+    assert "kelly_sweep.json" not in filer
+
+    manifest = json.loads((run_katalog / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["type"] == "tuning"
+    assert manifest["run_id"] == run_katalog.name
+    assert manifest["run_id"] in resultat.stdout
