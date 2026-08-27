@@ -24,7 +24,7 @@ import requests
 import odds
 
 
-def _rad(event_id="evt-1", snapshot_type="bet_time", bookmaker="pinnacle", utfall_navn="Boston Celtics"):
+def _rad(event_id="evt-1", snapshot_type="bet_time", bookmaker="pinnacle", utfall_navn="Boston Celtics", odds=1.85):
     """Bygger én odds_arkiv-rad (15 felt, samme rekkefølge som SKJEMA)."""
     return (
         "basketball_nba",           # sport
@@ -40,7 +40,7 @@ def _rad(event_id="evt-1", snapshot_type="bet_time", bookmaker="pinnacle", utfal
         bookmaker,                   # bookmaker
         "h2h",                        # marked
         utfall_navn,                  # utfall_navn
-        1.85,                         # odds
+        odds,                         # odds
         "2026-08-23T10:00:00",       # hentet_tidspunkt
     )
 
@@ -969,3 +969,79 @@ def test_prisrader_fra_kamp_manglende_title_faller_tilbake_til_key():
         }],
     }
     assert odds.prisrader_fra_kamp(kamp) == [("Boston Celtics", 1.90, "unibet")]
+
+
+# ---------------------------------------------------------------------------
+# Plan 05-04, Task 3: hent_bet_time_pris / hent_closing_pris — arkivlesere
+# bygget på velg_beste_pris_per_utfall. Kun ":memory:"-fixturen brukes her;
+# de ekte-arkiv-golden-case-verdiene sjekkes separat mot odds_arkiv.db i
+# denne plan-ens <verification>-blokk, ikke i selve pytest-suiten.
+# ---------------------------------------------------------------------------
+
+
+def test_hent_bet_time_pris_returnerer_maks_pris_per_side_pa_tvers_av_bookmakere(con):
+    odds.arkiver_odds_rader(con, [
+        _rad(event_id="evt-1", bookmaker="b1", utfall_navn="Boston Celtics", odds=1.90),
+        _rad(event_id="evt-1", bookmaker="b2", utfall_navn="Boston Celtics", odds=2.10),
+        _rad(event_id="evt-1", bookmaker="b3", utfall_navn="Boston Celtics", odds=1.95),
+        _rad(event_id="evt-1", bookmaker="b1", utfall_navn="Miami Heat", odds=1.80),
+        _rad(event_id="evt-1", bookmaker="b2", utfall_navn="Miami Heat", odds=2.05),
+        _rad(event_id="evt-1", bookmaker="b3", utfall_navn="Miami Heat", odds=1.70),
+    ])
+    resultat = odds.hent_bet_time_pris(con, "2023-01-15", 1610612738, 1610612748)
+    assert resultat == (2.10, 2.05)
+
+
+def test_bet_time_og_closing_snapshot_leses_uavhengig(con):
+    odds.arkiver_odds_rader(con, [
+        _rad(event_id="evt-1", snapshot_type="bet_time", utfall_navn="Boston Celtics", odds=1.90),
+        _rad(event_id="evt-1", snapshot_type="bet_time", utfall_navn="Miami Heat", odds=1.80),
+        _rad(event_id="evt-2", snapshot_type="closing", utfall_navn="Boston Celtics", odds=2.50),
+        _rad(event_id="evt-2", snapshot_type="closing", utfall_navn="Miami Heat", odds=1.60),
+    ])
+    assert odds.hent_bet_time_pris(con, "2023-01-15", 1610612738, 1610612748) == (1.90, 1.80)
+    assert odds.hent_closing_pris(con, "2023-01-15", 1610612738, 1610612748) == (2.50, 1.60)
+
+
+def test_tomt_arkiv_gir_none_none_for_begge_lesere(con):
+    assert odds.hent_bet_time_pris(con, "2023-01-15", 1610612738, 1610612748) == (None, None)
+    assert odds.hent_closing_pris(con, "2023-01-15", 1610612738, 1610612748) == (None, None)
+
+
+def test_kun_bet_time_arkivert_closing_gir_none_none_gap_game(con):
+    odds.arkiver_odds_rader(con, [
+        _rad(event_id="evt-1", snapshot_type="bet_time", utfall_navn="Boston Celtics", odds=1.90),
+        _rad(event_id="evt-1", snapshot_type="bet_time", utfall_navn="Miami Heat", odds=1.80),
+    ])
+    assert odds.hent_bet_time_pris(con, "2023-01-15", 1610612738, 1610612748) == (1.90, 1.80)
+    assert odds.hent_closing_pris(con, "2023-01-15", 1610612738, 1610612748) == (None, None)
+
+
+def test_kun_en_side_arkivert_gir_none_none(con):
+    odds.arkiver_odds_rader(con, [
+        _rad(event_id="evt-1", snapshot_type="bet_time", utfall_navn="Boston Celtics", odds=1.90),
+    ])
+    assert odds.hent_bet_time_pris(con, "2023-01-15", 1610612738, 1610612748) == (None, None)
+
+
+def test_arkivleser_reduserer_som_velg_beste_pris_per_utfall(con):
+    rader = [
+        _rad(event_id="evt-1", bookmaker="b1", utfall_navn="Boston Celtics", odds=1.90),
+        _rad(event_id="evt-1", bookmaker="b2", utfall_navn="Boston Celtics", odds=2.10),
+        _rad(event_id="evt-1", bookmaker="b1", utfall_navn="Miami Heat", odds=1.80),
+        _rad(event_id="evt-1", bookmaker="b2", utfall_navn="Miami Heat", odds=2.05),
+    ]
+    odds.arkiver_odds_rader(con, rader)
+
+    via_sql = odds.hent_bet_time_pris(con, "2023-01-15", 1610612738, 1610612748)
+
+    prisrader = [(rad[12], rad[13], rad[10]) for rad in rader]  # (utfall_navn, odds, bookmaker)
+    hjemme, borte, _, _ = odds.velg_beste_pris_per_utfall(prisrader, "Boston Celtics", "Miami Heat")
+    assert via_sql == (hjemme, borte)
+
+
+def test_odds_py_har_ingen_string_formatert_sql():
+    import pathlib
+    innhold = (pathlib.Path(__file__).resolve().parent.parent / "odds.py").read_text()
+    assert "execute(f\"" not in innhold
+    assert "execute(f'" not in innhold
