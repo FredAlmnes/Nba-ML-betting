@@ -838,3 +838,134 @@ def test_cli_uten_maks_kreditt_gir_argparse_feilkode(tmp_path):
         capture_output=True, text=True,
     )
     assert resultat.returncode == 2
+
+
+# ---------------------------------------------------------------------------
+# Plan 05-04: den delte beste-pris-per-utfall-regelen (velg_beste_pris_per_utfall)
+# og live-payload-flateneren (prisrader_fra_kamp). Begge er rene funksjoner —
+# ingen nettverk, ingen filsystem, ingen datetime.now() — dekket her case-for-
+# case per <behavior>-blokken i 05-04-PLAN.md sin Task 1.
+# ---------------------------------------------------------------------------
+
+
+def test_velg_beste_pris_per_utfall_returnerer_maks_pris_og_riktig_bookmaker():
+    prisrader = [
+        ("Boston Celtics", 1.90, "b1"),
+        ("Boston Celtics", 2.10, "b2"),
+        ("Boston Celtics", 1.95, "b3"),
+        ("Miami Heat", 1.80, "b1"),
+        ("Miami Heat", 2.05, "b2"),
+        ("Miami Heat", 1.70, "b3"),
+    ]
+    resultat = odds.velg_beste_pris_per_utfall(prisrader, "Boston Celtics", "Miami Heat")
+    assert resultat == (2.10, 2.05, "b2", "b2")
+
+
+def test_velg_beste_pris_per_utfall_uavgjort_forste_bookmaker_vinner():
+    prisrader = [
+        ("Boston Celtics", 2.00, "forst"),
+        ("Boston Celtics", 2.00, "sist"),
+    ]
+    resultat = odds.velg_beste_pris_per_utfall(prisrader, "Boston Celtics", "Miami Heat")
+    assert resultat == (2.00, None, "forst", None)
+
+
+def test_velg_beste_pris_per_utfall_kun_hjemmeside_gir_none_for_borte():
+    prisrader = [("Boston Celtics", 2.00, "b1")]
+    resultat = odds.velg_beste_pris_per_utfall(prisrader, "Boston Celtics", "Miami Heat")
+    assert resultat == (2.00, None, "b1", None)
+
+
+def test_velg_beste_pris_per_utfall_tom_liste_gir_alle_none():
+    assert odds.velg_beste_pris_per_utfall([], "Boston Celtics", "Miami Heat") == (None, None, None, None)
+
+
+def test_velg_beste_pris_per_utfall_ukjent_utfall_ignoreres():
+    prisrader = [
+        ("Boston Celtics", 2.00, "b1"),
+        ("Los Angeles Lakers", 5.00, "b2"),  # verken hjemme- eller bortelag
+    ]
+    resultat = odds.velg_beste_pris_per_utfall(prisrader, "Boston Celtics", "Miami Heat")
+    assert resultat == (2.00, None, "b1", None)
+
+
+def test_velg_beste_pris_per_utfall_ikke_positiv_pris_ignoreres():
+    prisrader = [
+        ("Boston Celtics", 0, "b1"),
+        ("Boston Celtics", -1.5, "b2"),
+        ("Boston Celtics", 1.90, "b3"),
+    ]
+    resultat = odds.velg_beste_pris_per_utfall(prisrader, "Boston Celtics", "Miami Heat")
+    assert resultat == (1.90, None, "b3", None)
+
+
+def test_prisrader_fra_kamp_returnerer_en_triple_per_utfall_per_bookmaker():
+    kamp = {
+        "home_team": "Boston Celtics",
+        "away_team": "Miami Heat",
+        "bookmakers": [
+            {
+                "key": "pinnacle",
+                "title": "Pinnacle",
+                "markets": [{
+                    "key": "h2h",
+                    "outcomes": [
+                        {"name": "Boston Celtics", "price": 1.90},
+                        {"name": "Miami Heat", "price": 1.95},
+                    ],
+                }],
+            },
+            {
+                "key": "unibet",
+                "title": "Unibet",
+                "markets": [{
+                    "key": "h2h",
+                    "outcomes": [
+                        {"name": "Boston Celtics", "price": 1.85},
+                        {"name": "Miami Heat", "price": 2.00},
+                    ],
+                }],
+            },
+        ],
+    }
+    prisrader = odds.prisrader_fra_kamp(kamp)
+    assert sorted(prisrader) == sorted([
+        ("Boston Celtics", 1.90, "Pinnacle"),
+        ("Miami Heat", 1.95, "Pinnacle"),
+        ("Boston Celtics", 1.85, "Unibet"),
+        ("Miami Heat", 2.00, "Unibet"),
+    ])
+
+
+def test_prisrader_fra_kamp_kun_spreads_gir_tom_liste():
+    kamp = {
+        "home_team": "Boston Celtics",
+        "away_team": "Miami Heat",
+        "bookmakers": [{
+            "key": "unibet",
+            "title": "Unibet",
+            "markets": [{
+                "key": "spreads",
+                "outcomes": [
+                    {"name": "Boston Celtics", "price": 1.90, "point": -5.5},
+                    {"name": "Miami Heat", "price": 1.90, "point": 5.5},
+                ],
+            }],
+        }],
+    }
+    assert odds.prisrader_fra_kamp(kamp) == []
+
+
+def test_prisrader_fra_kamp_manglende_title_faller_tilbake_til_key():
+    kamp = {
+        "home_team": "Boston Celtics",
+        "away_team": "Miami Heat",
+        "bookmakers": [{
+            "key": "unibet",
+            "markets": [{
+                "key": "h2h",
+                "outcomes": [{"name": "Boston Celtics", "price": 1.90}],
+            }],
+        }],
+    }
+    assert odds.prisrader_fra_kamp(kamp) == [("Boston Celtics", 1.90, "unibet")]
