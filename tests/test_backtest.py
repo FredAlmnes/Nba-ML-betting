@@ -552,3 +552,212 @@ def test_ekte_arkiv_gir_ingen_manglende_bet_time():
     _, resultat = backtest.kjor_backtest(d, min_treningskamper=100, skriv_ut=False)
     assert resultat["kamper_hoppet_over_manglende_odds"] == 0
     assert resultat["kamper_hoppet_over_ukjent_lag"] == 0
+
+
+# --- 4. Simuleringspass: innsats, ledger og oppgjør (plan 05-08 Task 1) ---
+
+
+def lag_prediksjon(**overstyr):
+    """
+    Bygger én fullstendig prediksjonsrad med fornuftige standardverdier,
+    og lar hver test overstyre enkeltfelt. Formen matcher nøyaktig
+    kjor_backtest sin egen radform (05-07-SUMMARY.md sin låste nøkkelliste).
+    """
+    rad = {
+        "as_of_dato": "2022-11-10",
+        "kamp_dato": "2022-11-10",
+        "game_id": "22200001",
+        "kamp": "Boston Celtics vs Miami Heat",
+        "side": "hjemme",
+        "bet": "Hjemme (Boston Celtics)",
+        "hjemme_lag_id": 1610612738,
+        "borte_lag_id": 1610612748,
+        "modell": backtest.MODELL_ETIKETT,
+        "retrent_dato": "2022-11-09",
+        "modell_prob": 0.65,
+        "modell_prob_hjemme": 0.65,
+        "odds": 2.00,
+        "impl_prob": 0.50,
+        "value": 0.15,
+        "ev": 0.30,
+        "odds_bet_time_hjemme": 2.00,
+        "odds_bet_time_borte": 2.00,
+        "odds_closing_hjemme": 1.90,
+        "odds_closing_borte": 2.10,
+        "hjemme_vant": 1,
+    }
+    rad.update(overstyr)
+    return rad
+
+
+def test_simuler_bets_produserer_ledgerrader():
+    vinner = lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                             bet="Hjemme (A)", side="hjemme", hjemme_vant=1)
+    taper = lag_prediksjon(kamp_dato="2022-11-11", game_id="2", kamp="C vs D",
+                            bet="Hjemme (C)", side="hjemme", hjemme_vant=0)
+    ledger, resultat = backtest.simuler_bets([vinner, taper], skriv_ut=False)
+    assert len(ledger) == 2
+    for rad in ledger:
+        assert list(rad.keys()) == backtest.LEDGER_KOLONNER
+
+
+def test_ledger_speiler_bots_bet_dict():
+    live_nokler = {
+        "dato", "kamp_dato", "kamp", "bet", "odds", "innsats", "modell",
+        "modell_prob", "value", "ev", "status", "gevinst",
+    }
+    assert set(backtest.LEDGER_KOLONNER[:12]) == live_nokler
+
+
+def test_innsats_bruker_strategy_beregn_innsats(monkeypatch):
+    def _sprakk(*args, **kwargs):
+        raise AssertionError("innsats skal aldri reimplementeres lokalt")
+
+    monkeypatch.setattr(backtest, "beregn_innsats", _sprakk)
+    with pytest.raises(AssertionError):
+        backtest.simuler_bets([lag_prediksjon()], skriv_ut=False)
+
+
+def test_kelly_null_hoppes_over_og_telles():
+    p = lag_prediksjon(modell_prob=0.45, odds=2.00, hjemme_vant=1)
+    ledger, resultat = backtest.simuler_bets([p], skriv_ut=False)
+    assert ledger == []
+    assert resultat["kandidater_uten_kelly_edge"] == 1
+
+
+def test_flat_innsats_ignorerer_kelly():
+    p = lag_prediksjon(modell_prob=0.45, odds=2.00, hjemme_vant=1)
+    flat = backtest.flat_innsats_belop(config.STARTKAPITAL)
+    ledger, resultat = backtest.simuler_bets([p], flat_innsats=flat, skriv_ut=False)
+    assert len(ledger) == 1
+    assert ledger[0]["innsats"] == flat
+
+
+def test_flat_innsats_er_uavhengig_av_saldo():
+    flat = backtest.flat_innsats_belop(config.STARTKAPITAL)
+    p1 = lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                         bet="Hjemme (A)", side="hjemme", odds=10.0, modell_prob=0.9,
+                         hjemme_vant=1)
+    p2 = lag_prediksjon(kamp_dato="2022-11-11", game_id="2", kamp="C vs D",
+                         bet="Hjemme (C)", side="hjemme", odds=2.0, modell_prob=0.6,
+                         hjemme_vant=1)
+    ledger, resultat = backtest.simuler_bets([p1, p2], flat_innsats=flat, skriv_ut=False)
+    assert ledger[0]["innsats"] == flat
+    assert ledger[1]["innsats"] == flat
+
+
+def test_oppgjor_skjer_etter_at_dagens_bets_er_bestemt():
+    p1 = lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                         bet="Hjemme (A)", side="hjemme", odds=5.0, modell_prob=0.9,
+                         hjemme_vant=1)
+    p2 = lag_prediksjon(kamp_dato="2022-11-10", game_id="2", kamp="C vs D",
+                         bet="Hjemme (C)", side="hjemme", odds=2.0, modell_prob=0.6,
+                         hjemme_vant=1)
+    ledger, resultat = backtest.simuler_bets([p1, p2], skriv_ut=False)
+    forste, andre = ledger[0], ledger[1]
+    assert andre["saldo_for"] == pytest.approx(config.STARTKAPITAL - forste["innsats"])
+
+
+def test_gevinst_bruker_metrics_beregn_profitt(monkeypatch):
+    def _sprakk(*args, **kwargs):
+        raise AssertionError("gevinst skal aldri reimplementeres lokalt")
+
+    monkeypatch.setattr(backtest, "beregn_profitt", _sprakk)
+    with pytest.raises(AssertionError):
+        backtest.simuler_bets([lag_prediksjon()], skriv_ut=False)
+
+
+def test_bet_vant_for_begge_sider():
+    assert backtest.bet_vant("hjemme", 1) is True
+    assert backtest.bet_vant("borte", 0) is True
+    assert backtest.bet_vant("hjemme", 0) is False
+    assert backtest.bet_vant("borte", 1) is False
+
+
+def test_clv_kolonnen_bruker_metrics_beregn_clv():
+    p = lag_prediksjon(side="hjemme", bet="Hjemme (A)",
+                        odds_bet_time_hjemme=2.00, odds_bet_time_borte=2.00,
+                        odds_closing_hjemme=1.50, odds_closing_borte=3.00,
+                        hjemme_vant=1)
+    ledger, resultat = backtest.simuler_bets([p], skriv_ut=False)
+    assert ledger[0]["clv"] == pytest.approx(1 / 6)
+
+
+def test_clv_er_none_uten_closing():
+    p = lag_prediksjon(odds_closing_hjemme=None, odds_closing_borte=None, hjemme_vant=1)
+    ledger, resultat = backtest.simuler_bets([p], skriv_ut=False)
+    assert ledger[0]["clv"] is None
+    assert resultat["bets_uten_clv"] == 1
+
+
+def test_innsatsfunksjonen_ser_verken_utfall_eller_closing():
+    kilde = inspect.getsource(backtest.beregn_innsats_for_kandidat)
+    for token in ("hjemme_vant", "closing", "clv", "gevinst", "status"):
+        assert token not in kilde
+
+
+def test_lav_bankroll_stopper_dagen():
+    # Innsatsen klemmes opp til config.MIN_INNSATS (20.0) for begge kandidatene
+    # her, så startkapitalen må romme nøyaktig én slik innsats og likevel
+    # falle under min_innsats*2-gulvet etter den andre: 3*MIN_INNSATS+5 gir
+    # saldo 65 -> 45 (>= 40, plassert) -> 25 (< 40, stopp).
+    startkapital = config.MIN_INNSATS * 3 + 5.0
+    p1 = lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                         bet="Hjemme (A)", side="hjemme", odds=1.6, modell_prob=0.7,
+                         hjemme_vant=1)
+    p2 = lag_prediksjon(kamp_dato="2022-11-10", game_id="2", kamp="C vs D",
+                         bet="Hjemme (C)", side="hjemme", odds=1.6, modell_prob=0.7,
+                         hjemme_vant=1)
+    ledger, resultat = backtest.simuler_bets([p1, p2], startkapital=startkapital, skriv_ut=False)
+    assert len(ledger) == 1
+    assert resultat["datoer_stoppet_lav_bankroll"] == 1
+
+
+def test_duplikat_kandidat_hoppes_over():
+    p1 = lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                         bet="Hjemme (A)", side="hjemme", hjemme_vant=1)
+    p2 = lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                         bet="Hjemme (A)", side="hjemme", hjemme_vant=1)
+    ledger, resultat = backtest.simuler_bets([p1, p2], skriv_ut=False)
+    assert len(ledger) == 1
+    assert resultat["bets_hoppet_over_duplikat"] == 1
+
+
+def test_simuler_bets_er_deterministisk():
+    preds = [
+        lag_prediksjon(kamp_dato="2022-11-12", game_id="2", kamp="C vs D",
+                        bet="Hjemme (C)", side="hjemme", hjemme_vant=1),
+        lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                        bet="Hjemme (A)", side="hjemme", hjemme_vant=0),
+    ]
+    ledger1, resultat1 = backtest.simuler_bets(preds, skriv_ut=False)
+    ledger2, resultat2 = backtest.simuler_bets(preds, skriv_ut=False)
+    assert ledger1 == ledger2
+    assert resultat1 == resultat2
+
+
+def test_tom_prediksjonsliste_gir_tom_ledger():
+    ledger, resultat = backtest.simuler_bets([], skriv_ut=False)
+    assert ledger == []
+    assert resultat["bets_plassert"] == 0
+    assert resultat["sluttsaldo"] == config.STARTKAPITAL
+
+
+def test_bets_uten_utfall_hoppes_over():
+    p = lag_prediksjon(hjemme_vant=None)
+    ledger, resultat = backtest.simuler_bets([p], skriv_ut=False)
+    assert ledger == []
+    assert resultat["bets_uten_utfall"] == 1
+
+
+def test_ledger_er_sortert_kronologisk():
+    p1 = lag_prediksjon(kamp_dato="2022-11-12", game_id="2", kamp="C vs D",
+                         bet="Hjemme (C)", side="hjemme", odds=2.0, modell_prob=0.7,
+                         hjemme_vant=1)
+    p2 = lag_prediksjon(kamp_dato="2022-11-10", game_id="1", kamp="A vs B",
+                         bet="Hjemme (A)", side="hjemme", odds=2.0, modell_prob=0.7,
+                         hjemme_vant=1)
+    ledger, resultat = backtest.simuler_bets([p1, p2], skriv_ut=False)
+    assert [rad["kamp_dato"] for rad in ledger] == ["2022-11-10", "2022-11-12"]
+    saldoer = [rad["saldo_etter_dato"] for rad in ledger]
+    assert saldoer == sorted(saldoer)
