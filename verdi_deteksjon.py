@@ -138,24 +138,18 @@ def finn_value_bets(modell, feature_kolonner, kamper=None, api_nokkel=None, hent
         modell_sann_hjemme = modell.predict_proba(X)[0][1]
         modell_sann_borte  = 1 - modell_sann_hjemme
 
-        # Finn beste odds fra bookmakers
-        beste_hjemme_odds = 0
-        beste_borte_odds  = 0
-        beste_hjemme_book = ""
-        beste_borte_book  = ""
+        # Prisvalg lever bevisst ikke lenger her: odds.velg_beste_pris_per_utfall
+        # er den samme funksjonen Fase 5-backtesten kaller (odds.hent_bet_time_pris),
+        # så live og backtest aldri kan drifte til to forskjellige prisingsregler —
+        # samme grunn som fjern_vigorish/beregn_value_og_ev ble flyttet til
+        # strategy.py (se kommentaren rett under).
+        beste_hjemme_odds, beste_borte_odds, beste_hjemme_book, beste_borte_book = (
+            odds.velg_beste_pris_per_utfall(
+                odds.prisrader_fra_kamp(kamp), hjemme_navn, borte_navn
+            )
+        )
 
-        for bookmaker in kamp.get("bookmakers", []):
-            for market in bookmaker.get("markets", []):
-                if market["key"] == "h2h":
-                    for outcome in market["outcomes"]:
-                        if outcome["name"] == hjemme_navn and outcome["price"] > beste_hjemme_odds:
-                            beste_hjemme_odds = outcome["price"]
-                            beste_hjemme_book = bookmaker["title"]
-                        elif outcome["name"] == borte_navn and outcome["price"] > beste_borte_odds:
-                            beste_borte_odds = outcome["price"]
-                            beste_borte_book = bookmaker["title"]
-
-        if beste_hjemme_odds == 0 or beste_borte_odds == 0:
+        if beste_hjemme_odds is None or beste_borte_odds is None:
             continue
 
         # Vig-fri normalisering og value/EV-beregning bor nå i strategy.py, slik
