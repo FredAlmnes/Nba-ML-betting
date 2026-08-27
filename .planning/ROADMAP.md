@@ -179,7 +179,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1)*
 
 - [x] 05-02-PLAN.md — model.py: as_of-bevisst tren/kalibrer/lagre/last trukket ut av 03_tren_modell.py + tests/test_model.py
-- [ ] 05-03-PLAN.md — metrics.py: ROI, vinnrate, maks drawdown, bootstrap-KI, Wilson-KI og CLV + tests/test_metrics.py
+- [x] 05-03-PLAN.md — metrics.py: ROI, vinnrate, maks drawdown, bootstrap-KI, Wilson-KI og CLV + tests/test_metrics.py
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -226,4 +226,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 9/9 | Complete   | 2026-08-24 |
-| 5. Walk-Forward Backtest Engine | 2/13 | In Progress|  |
+| 5. Walk-Forward Backtest Engine | 3/13 | In Progress|  |

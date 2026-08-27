@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-08-27T09:43:36.846Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-08-27T10:22:54.503Z"
 last_activity: 2026-08-27
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 35
-  completed_plans: 24
-  percent: 69
+  completed_plans: 25
+  percent: 71
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
-Plan: 3 of 13
+Plan: 4 of 13
 Status: Ready to execute
 Last activity: 2026-08-27
 
-Progress: [███████░░░] 69%
+Progress: [███████░░░] 71%
 
 ## Performance Metrics
 
@@ -77,6 +77,7 @@ Progress: [███████░░░] 69%
 | Phase 04 P09 | ~2h | 3 tasks | 3 files |
 | Phase 05 P01 | 6min | 3 tasks | 5 files |
 | Phase 05 P02 | 9min | 2 tasks | 4 files |
+| Phase 05 P03 | 35min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 01: D-05-04 scratch artifacts stay ignore-only, unchanged from Phase 1's D-08 -- no deletion performed in this plan
 - [Phase 05]: Plan 02: del_for_trening's as_of branch validates kalibrer_andel before checking window size, so an invalid fraction always raises regardless of history available before as_of
 - [Phase 05]: Plan 02: tren_og_kalibrer keeps verbose=50 default (03_tren_modell.py calls it directly, unchanged stdout); the tren() convenience wrapper Plan 05-07 uses defaults verbose=False since the backtest fits ~24 models per run
+- [Phase 05]: Plan 03: CLV sign convention locked exactly as 05-CONTEXT.md specifies -- closing vig-free prob minus bet-time vig-free prob, so positive = bet beat the close — beregn_clv routes through two calls to strategy.fjern_vigorish, proven by monkeypatch (not just grep), so a local re-derivation would fail the test even if the import line stayed correct
+- [Phase 05]: Plan 03: oppsummer_ledger is entirely date-unaware — lets plan 05-08 call it repeatedly over date-filtered ledger slices (full-period + ex-burn-in per D-05-02) at near-zero cost, returning bootstrap_seed/bootstrap_n_resamples for manifest.json reproducibility (BT-05)
 
 ### Pending Todos
 
@@ -152,6 +155,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T09:43:36.837Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-08-27T10:22:54.495Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
