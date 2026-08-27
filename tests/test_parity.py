@@ -41,6 +41,11 @@ as_of_dato-fixturen i tests/conftest.py, aldri fra klokken — en test som
 leser klokken er ikke en determinismetest.
 """
 
+import inspect
+import os
+import sqlite3
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -556,3 +561,165 @@ def test_begge_veier_avviser_odds_over_maks(con, monkeypatch):
 
     assert live == []
     assert ledger == []
+
+
+# ---------------------------------------------------------------------
+# Strukturelle paritetsvakter: én regel, ett sett konstanter, én kolonnekontrakt
+# ---------------------------------------------------------------------
+
+EKTE_ARKIVDATO = "2023-01-15"
+
+
+def test_paritetsassertionen_har_diskriminerende_kraft(con, monkeypatch):
+    """
+    Ikke-vakuitetsbeviset, og den viktigste testen i denne planen. Kjører
+    backtest-veien en gang til på SAMME fikstur, men med
+    min_value_terskel hevet over fiksturens value (0.106329), slik at
+    backtest nå flagger null bets mens live-veien fortsatt flagger ett.
+    Beviser at test_identisk_bet_beslutning_live_og_backtest sammenligner
+    noe ekte: hadde sammenligningen manglet diskriminerende kraft, ville
+    denne tvungne uenigheten fortsatt sett ut som enighet (T-05-11-01).
+    """
+    modell = FastModell(0.60)
+    monkeypatch.setattr(backtest.model, "tren", _lag_stub_tren(modell))
+
+    kamp = lag_live_kamp(PRISER_PARITET)
+    odds.arkiver_odds_rader(con, lag_arkivrader(PRISER_PARITET, "bet_time"))
+
+    live = kjor_live(modell, kamp)
+    _prediksjoner, _resultat, ledger, _resultat_sim = kjor_backtest_veien(
+        con, min_value_terskel=0.20,
+    )
+
+    assert len(live) == 1
+    assert ledger == []
+    assert live != ledger  # tvungen uenighet, ikke tilfeldig tom-vs-tom
+
+
+def test_ingen_andre_besteprisregel_i_kodebasen():
+    """
+    Kildekode-nivå: nøyaktig én velg_beste_pris_per_utfall-definisjon
+    finnes repo-bredt (unntatt venv/ og tests/), verdi_deteksjon.py sin
+    kildekode inneholder kallet odds.velg_beste_pris_per_utfall, og
+    verdi_deteksjon.py inneholder ingen overlevende inline reduksjon.
+
+    Leser filene med pathlib/inspect herfra, shell-er IKKE ut til grep —
+    plan 02-06 oppdaget at denne maskinens BSD-grep ikke prefikser
+    rekursive treff med './', som stille no-op'et den planens
+    ekskluderingsfiltre; en Python-side glob har ingen grep-dialekt å
+    bomme på.
+    """
+    repo_rot = Path(__file__).resolve().parent.parent
+
+    definisjoner = 0
+    for py_fil in repo_rot.glob("*.py"):
+        tekst = py_fil.read_text(encoding="utf-8")
+        for linje in tekst.splitlines():
+            if linje.startswith("def velg_beste_pris_per_utfall"):
+                definisjoner += 1
+
+    assert definisjoner == 1
+
+    vd_kilde = inspect.getsource(verdi_deteksjon)
+    assert "odds.velg_beste_pris_per_utfall" in vd_kilde
+    assert "beste_hjemme_odds = 0" not in vd_kilde
+    assert 'outcome["price"] >' not in vd_kilde
+
+
+def test_begge_veier_bruker_samme_terskelkonstanter():
+    """
+    Objekt-IDENTITET, ikke verdi-likhet. `is` fungerer her kun fordi de
+    tre konstantene er modul-nivå floats bundet av
+    `from config import ...` i verdi_deteksjon.py, slik at begge navnene
+    peker på samme objekt; hvis en fremtidig refaktorering får en av
+    sidene til å beregne eller kopiere en verdi, feiler denne testen, og
+    den feilen ER det tiltenkte signalet, ikke en falsk alarm å lempe
+    til `==` (T-05-11-05).
+    """
+    assert verdi_deteksjon.MIN_VALUE_TERSKEL is config.MIN_VALUE_TERSKEL
+    assert verdi_deteksjon.MIN_ODDS is config.MIN_ODDS
+    assert verdi_deteksjon.MAX_ODDS is config.MAX_ODDS
+
+    defaults = inspect.signature(backtest.vurder_kamp).parameters
+    assert defaults["min_value_terskel"].default is config.MIN_VALUE_TERSKEL
+    assert defaults["min_odds"].default is config.MIN_ODDS
+    assert defaults["maks_odds"].default is config.MAX_ODDS
+
+
+def test_live_feature_rad_dekker_modellens_kolonner():
+    """
+    Den utsatte 02-05-funnen, pinnet. features.bygg_feature_rad emitterer
+    DIFF_ for alle NI STATS_KOLONNER, mens batch-feature-tabellen kun
+    emitterer DIFF_ for de SYV DIFF_STATS. Retningen "strikt supersett"
+    er den trygge: live-veien filtrerer til feature_kolonner FØR
+    predict_proba, så ekstra kolonner forkastes harmløst, mens en
+    MANGLENDE kolonne ville reist KeyError ved inferens på en ekte
+    betting-dag.
+    """
+    hjemme_stats = {k: 1.0 for k in features.STATS_KOLONNER}
+    borte_stats = {k: 0.5 for k in features.STATS_KOLONNER}
+    live_rad = features.bygg_feature_rad(hjemme_stats, borte_stats)
+
+    batch_kolonner = (
+        [f"HJEMME_RULL_{s}" for s in features.STATS_KOLONNER]
+        + [f"BORTE_RULL_{s}" for s in features.STATS_KOLONNER]
+        + [f"DIFF_{s}" for s in features.DIFF_STATS]
+    )
+
+    assert set(batch_kolonner) < set(live_rad.keys())
+    assert set(live_rad.keys()) - set(batch_kolonner) == {"DIFF_FT_PCT", "DIFF_FG3_PCT"}
+
+
+@pytest.mark.skipif(
+    not os.path.exists("odds_arkiv.db"),
+    reason="odds_arkiv.db er gitignoret og finnes kun på en maskin som har "
+           "kjørt plan 04-09s backfill",
+)
+def test_arkivpris_matcher_live_reduksjon_paa_ekte_kamp():
+    """
+    To uavhengige implementasjoner — en Python-reduksjon
+    (odds.velg_beste_pris_per_utfall) og en SQL MAX(odds) ... GROUP BY
+    utfall_navn (odds.hent_bet_time_pris) — over ekte, fler-bookmaker-
+    rader med ekte uavgjort-oppførsel. Åpner databasen READ-ONLY og
+    skriver aldri til den — arkivet kostet 17 710 API-kreditter (plan
+    04-09) å bygge, og en test som kunne mutere det er den ene ekte
+    asset-risikoen på denne planens overflate.
+    """
+    ro_uri = f"file:{os.path.abspath('odds_arkiv.db')}?mode=ro"
+    con = sqlite3.connect(ro_uri, uri=True)
+    try:
+        rad = con.execute(
+            """
+            SELECT event_id, kamp_dato, hjemmelag, bortelag, hjemme_lag_id, borte_lag_id
+            FROM odds_arkiv
+            WHERE snapshot_type = 'bet_time' AND kamp_dato = ?
+            ORDER BY event_id ASC
+            LIMIT 1
+            """,
+            (EKTE_ARKIVDATO,),
+        ).fetchone()
+        if rad is None:
+            pytest.skip(f"Ingen arkivert bet_time-kamp på {EKTE_ARKIVDATO} på denne maskinen")
+
+        event_id, kamp_dato, hjemmelag, bortelag, hjemme_lag_id, borte_lag_id = rad
+
+        rader = con.execute(
+            """
+            SELECT utfall_navn, odds, bookmaker
+            FROM odds_arkiv
+            WHERE event_id = ? AND snapshot_type = 'bet_time'
+            """,
+            (event_id,),
+        ).fetchall()
+        prisrader = [(utfall_navn, pris, bookmaker) for utfall_navn, pris, bookmaker in rader]
+
+        python_hjemme, python_borte, _, _ = odds.velg_beste_pris_per_utfall(
+            prisrader, hjemmelag, bortelag,
+        )
+        sql_hjemme, sql_borte = odds.hent_bet_time_pris(
+            con, kamp_dato, hjemme_lag_id, borte_lag_id,
+        )
+
+        assert (python_hjemme, python_borte) == (sql_hjemme, sql_borte)
+    finally:
+        con.close()
