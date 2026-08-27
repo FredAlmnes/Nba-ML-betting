@@ -204,7 +204,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7)*
 
-- [ ] 05-10-PLAN.md — 08_kjor_backtest.py: CLI med ISO-datovalidering og to-flagget holdout-vei + KOMME_I_GANG.md
+- [x] 05-10-PLAN.md — 08_kjor_backtest.py: CLI med ISO-datovalidering og to-flagget holdout-vei + KOMME_I_GANG.md
 - [ ] 05-11-PLAN.md — tests/test_parity.py: live-vs-backtest beslutningsparitet + full suite-port
 
 **Wave 9** *(blocked on Wave 8)*
@@ -226,4 +226,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 9/9 | Complete   | 2026-08-24 |
-| 5. Walk-Forward Backtest Engine | 9/13 | In Progress|  |
+| 5. Walk-Forward Backtest Engine | 10/13 | In Progress|  |

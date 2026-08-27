@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-09-PLAN.md
-last_updated: "2026-08-27T12:13:11.190Z"
+stopped_at: Completed 05-10-PLAN.md
+last_updated: "2026-08-27T21:01:00.473Z"
 last_activity: 2026-08-27
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 35
-  completed_plans: 31
+  completed_plans: 32
   percent: 80
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
-Plan: 10 of 13
+Plan: 11 of 13
 Status: Ready to execute
 Last activity: 2026-08-27
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -84,6 +84,7 @@ Progress: [█████████░] 89%
 | Phase 05 P07 | 14min | 3 tasks | 3 files |
 | Phase 05 PP08 | 55min | 3 tasks | 3 files |
 | Phase 05 P09 | ~20min | 3 tasks | 3 files |
+| Phase 05 P10 | 10min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -153,6 +154,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 08: settlement batched per simulated kamp_dato, never per bet, mirroring 06_bot.py's settle-at-next-run ordering -- ledger's saldo_for column makes BT-02 auditable straight from ledger.csv
 - [Phase 05]: Plan 08: fixed a real-data-only bug where xgboost's numpy.float32 predict_proba output leaked into the manifest's sluttsaldo, breaking json.dump -- innsats cast to float() immediately after staking (T-05-08-09)
 - [Phase ?]: 05-09: Fixed a signature mismatch (Rule 1) in the plan's suggested oppsummer_ledger(*hent_metrikkserier(...)) call — startkapital and clv_verdier landed in swapped positions; unpacked explicitly and passed clv_verdier as a keyword, matching bygg_manifest's existing pattern
+- [Phase 05]: Plan 10: default --til resolves to dag_for_holdout() (day before config.HOLDOUT_START_DATO) only when --holdout is absent and --til was omitted; an explicit --til is never overridden and the --holdout path is never clamped — Prevents the bare python 08_kjor_backtest.py invocation from tripping HoldoutLaastFeil while never widening the holdout's own self-narrowing range
+- [Phase 05]: Plan 10: four holdout-adjacent CLI flag combinations refused via parser.error (exit 2) before any file is opened or directory created: confirmation without --holdout, --holdout without confirmation, --holdout+--sweep, --holdout+--fra/--til — kjor_holdout() is the only function whose source may contain holdout=True, pinned by an inspect.getsource source-exclusion test (T-05-10-01/02)
 
 ### Pending Todos
 
@@ -174,6 +177,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T12:13:11.182Z
-Stopped at: Completed 05-09-PLAN.md
+Last session: 2026-08-27T21:01:00.465Z
+Stopped at: Completed 05-10-PLAN.md
 Resume file: None
