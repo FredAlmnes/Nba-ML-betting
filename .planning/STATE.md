@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-08-27T10:22:54.503Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-08-27T10:33:25.390Z"
 last_activity: 2026-08-27
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 35
-  completed_plans: 25
-  percent: 71
+  completed_plans: 26
+  percent: 74
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
-Plan: 4 of 13
+Plan: 5 of 13
 Status: Ready to execute
 Last activity: 2026-08-27
 
-Progress: [███████░░░] 71%
+Progress: [███████░░░] 74%
 
 ## Performance Metrics
 
@@ -78,6 +78,7 @@ Progress: [███████░░░] 71%
 | Phase 05 P01 | 6min | 3 tasks | 5 files |
 | Phase 05 P02 | 9min | 2 tasks | 4 files |
 | Phase 05 P03 | 35min | 3 tasks | 2 files |
+| Phase 05 P04 | 20min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -134,6 +135,9 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 02: tren_og_kalibrer keeps verbose=50 default (03_tren_modell.py calls it directly, unchanged stdout); the tren() convenience wrapper Plan 05-07 uses defaults verbose=False since the backtest fits ~24 models per run
 - [Phase 05]: Plan 03: CLV sign convention locked exactly as 05-CONTEXT.md specifies -- closing vig-free prob minus bet-time vig-free prob, so positive = bet beat the close — beregn_clv routes through two calls to strategy.fjern_vigorish, proven by monkeypatch (not just grep), so a local re-derivation would fail the test even if the import line stayed correct
 - [Phase 05]: Plan 03: oppsummer_ledger is entirely date-unaware — lets plan 05-08 call it repeatedly over date-filtered ledger slices (full-period + ex-burn-in per D-05-02) at near-zero cost, returning bootstrap_seed/bootstrap_n_resamples for manifest.json reproducibility (BT-05)
+- [Phase 05]: Plan 04: velg_beste_pris_per_utfall passes pris through unchanged (no float() coercion), preserving whatever value type the live Odds API payload or archive row already carries
+- [Phase 05]: Plan 04: _hent_beste_arkivpris pre-aggregates via SQL MAX(odds) GROUP BY utfall_navn before reducing through velg_beste_pris_per_utfall in Python -- provably equivalent, keeps the side-mapping/winner rule in exactly one place
+- [Phase 05]: Plan 04: no public snapshot_type parameter anywhere -- hent_bet_time_pris and hent_closing_pris each bind their own literal, making decision code structurally unable to reach a closing price by passing an argument (BT-02)
 
 ### Pending Todos
 
@@ -155,6 +159,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T10:22:54.495Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-08-27T10:33:25.382Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
