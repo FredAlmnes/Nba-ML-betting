@@ -623,6 +623,94 @@ def prisrader_fra_kamp(kamp):
     return prisrader
 
 
+def _hent_beste_arkivpris(con, kamp_dato, hjemme_lag_id, borte_lag_id, snapshot_type):
+    """
+    Leser alle arkivrader for (kamp_dato, hjemme_lag_id, borte_lag_id,
+    snapshot_type), pre-aggregert med `MAX(odds) ... GROUP BY utfall_navn`,
+    og reduserer dem via velg_beste_pris_per_utfall. Returnerer
+    (beste_hjemme_odds, beste_borte_odds) — `(None, None)` hvis ingen rader
+    finnes, eller hvis bare én side har en kvalifiserende rad.
+
+    SQL-en pre-aggregerer selv om velg_beste_pris_per_utfall ville regnet ut
+    akkurat samme maksimum i Python: grouping er en indeks-vennlig innsnevring
+    som beviselig ikke kan endre resultatet (maksimum av én allerede-maksimal
+    verdi per utfall ER den verdien), mens selve regelen som mapper utfalls-
+    navn til side og velger vinneren fortsatt bor ETT sted.
+
+    To verifiserte arkiv-fakta denne funksjonen hviler på (05-04-PLAN.md
+    <verified_archive_facts>): (kamp_dato, hjemme_lag_id, borte_lag_id,
+    snapshot_type) løser til nøyaktig én event_id på tvers av alle 187 376
+    arkiverte rader, og utfall_navn er alltid enten hjemmelag eller bortelag.
+
+    Ingen public snapshot_type-parameter finnes utenfor denne private
+    funksjonen — hent_bet_time_pris og hent_closing_pris binder hver sin
+    egen literal. Ikke "forenkle" dette tilbake til én public parameterisert
+    funksjon: det ville gjøre det strukturelt mulig for beslutningskode å nå
+    en closing-pris via et funksjonsargument (BT-02).
+
+    apne_arkiv() setter ingen row_factory, så radene fra fetchall() er
+    posisjonelle tupler, ikke dict-lignende rader — unpakkes posisjonelt her.
+    con.row_factory settes heller ikke her, siden connection-en deles med
+    kjor_backfill og andre kallere som avhenger av tuppel-rader.
+    """
+    rader = con.execute(
+        """
+        SELECT utfall_navn, MAX(odds), bookmaker, hjemmelag, bortelag
+        FROM odds_arkiv
+        WHERE kamp_dato = ? AND snapshot_type = ? AND marked = ?
+          AND hjemme_lag_id = ? AND borte_lag_id = ?
+        GROUP BY utfall_navn
+        """,
+        (kamp_dato, snapshot_type, MARKED, hjemme_lag_id, borte_lag_id),
+    ).fetchall()
+
+    if not rader:
+        return None, None
+
+    _, _, _, hjemmelag, bortelag = rader[0]
+    prisrader = [(utfall_navn, pris, bookmaker) for utfall_navn, pris, bookmaker, _, _ in rader]
+
+    beste_hjemme_odds, beste_borte_odds, _, _ = velg_beste_pris_per_utfall(
+        prisrader, hjemmelag, bortelag
+    )
+
+    if beste_hjemme_odds is None or beste_borte_odds is None:
+        return None, None
+
+    return beste_hjemme_odds, beste_borte_odds
+
+
+def hent_bet_time_pris(con, kamp_dato, hjemme_lag_id, borte_lag_id):
+    """
+    Beste bet_time-pris for en arkivert kamp: (hjemme_odds, borte_odds).
+
+    Kallerens forpliktelse: en `(None, None)`-retur betyr HOPP OVER denne
+    kampen og tell hoppet — det skal ALDRI leses som "ingen value funnet",
+    og skal ALDRI etterfylles fra closing-snapshotet (05-RESEARCH.md
+    Pitfall 2 og Anti-Patterns; plan 05-07 eier selve hoppe-telleren).
+    """
+    return _hent_beste_arkivpris(con, kamp_dato, hjemme_lag_id, borte_lag_id, "bet_time")
+
+
+def hent_closing_pris(con, kamp_dato, hjemme_lag_id, borte_lag_id):
+    """
+    Closing-pris for en arkivert kamp: (hjemme_odds, borte_odds). Finnes
+    UTELUKKENDE for BT-06-metrikken CLV, beregnet nedstrøms som vig-fri
+    closing-sannsynlighet minus vig-fri bet_time-sannsynlighet (positiv CLV =
+    spilleren slo closing-linjen, 05-CONTEXT.md sin korrigerte fortegns-
+    konvensjon).
+
+    Denne prisen må ALDRI mates inn i en betslutning — den er informasjon fra
+    ETTER beslutningsøyeblikket, og å bruke den i value/EV-veien ville vært
+    nøyaktig den lekkasjen BT-02 forbyr.
+
+    7 av 3 650 arkiverte kamper har legitimt ikke noe closing-snapshot —
+    `(None, None)` her betyr da "CLV er utilgjengelig for dette betet", ikke
+    en feil, og ledger-ens `clv`-kolonne forblir tom for disse.
+    """
+    return _hent_beste_arkivpris(con, kamp_dato, hjemme_lag_id, borte_lag_id, "closing")
+
+
 # ---------------------------------------------------------------------------
 # Backfill-driveren (plan 04-05)
 #
