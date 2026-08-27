@@ -1082,3 +1082,38 @@ def test_ny_kode_apner_ikke_holdoutvinduet():
         line for line in rest.splitlines() if not line.strip().startswith("#")
     )
     assert "tillat_holdout=True" not in rest_uten_kommentarer
+
+
+# --- 6. Ekte kjøring av kjor_og_lagre (plan 05-08 Task 3) ---
+
+
+@pytest.mark.skipif(not _EKTE_DATA_TILGJENGELIG, reason=_HOPP_OVER_GRUNN)
+def test_ekte_kjoring_skriver_manifest_og_ledger(tmp_path):
+    """En skrevet backtest-ledger har ingen ventende bets — status er alltid avgjort."""
+    d = backtest.klargjor_backtestdata(fra="2022-10-24", til="2022-11-07")
+    sti, manifest, ledger = backtest.kjor_og_lagre(
+        d, min_treningskamper=100, katalog=str(tmp_path), skriv_ut=False
+    )
+
+    with open(os.path.join(sti, backtest.MANIFEST_FIL), encoding="utf-8") as f:
+        lest = json.load(f)
+    assert lest["run_id"] == manifest["run_id"]
+
+    df = pd.read_csv(os.path.join(sti, backtest.LEDGER_FIL))
+    assert len(df) == manifest["metrikker"]["antall_bets"]
+    assert set(df["status"]) <= {"vant", "tapte"}
+
+
+@pytest.mark.skipif(not _EKTE_DATA_TILGJENGELIG, reason=_HOPP_OVER_GRUNN)
+def test_ekte_ledger_regnskapet_gaar_opp(tmp_path):
+    """Binder manifestets hovedtall til de ledger-radene som faktisk produserte dem."""
+    d = backtest.klargjor_backtestdata(fra="2022-10-24", til="2022-11-07")
+    sti, manifest, ledger = backtest.kjor_og_lagre(
+        d, min_treningskamper=100, katalog=str(tmp_path), skriv_ut=False
+    )
+
+    m = manifest["metrikker"]
+    assert m["antall_med_clv"] + m["antall_uten_clv"] == m["antall_bets"]
+
+    sum_gevinst = sum(rad["gevinst"] for rad in ledger)
+    assert sum_gevinst == pytest.approx(m["sum_profitt"], abs=0.01)
