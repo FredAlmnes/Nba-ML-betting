@@ -19,6 +19,12 @@ modul-nivå I/O gjøres — all fil-/database-lesing skjer inne i
 klargjor_backtestdata(), kalt eksplisitt av kalleren.
 """
 
+import hashlib
+import json
+import os
+import re
+from datetime import datetime
+
 import pandas as pd
 
 import config
@@ -30,7 +36,11 @@ import teams
 from strategy import beregn_value_og_ev, fjern_vigorish, beregn_innsats, er_duplikat, finn_bet_nokkel
 # metrics.py importerer kun numpy og strategy.fjern_vigorish, så denne
 # importen åpner ingen sirkel tilbake til backtest.py.
-from metrics import beregn_clv, beregn_profitt
+from metrics import beregn_clv, beregn_profitt, oppsummer_ledger
+
+# datetime.now() leses KUN ett sted i denne modulen — bygg_run_id sin
+# standardverdi-håndtering. Hver test injiserer et fast tidspunkt i stedet,
+# slik at modulen forblir deterministisk under test.
 
 
 DATO_KOLONNE = "GAME_DATE_HJEMME"    # Samme kolonne model.py/features.py bruker for kronologisk sortering
@@ -449,15 +459,16 @@ def kjor_endelig_holdout_backtest(data, **kwargs):
 FLAT_INNSATS_ANDEL = 0.02   # D-05-03: 2% av config.STARTKAPITAL = 20.00 kr, sammenfaller med config.MIN_INNSATS
 
 # De første tolv feltene er 06_bot.py:278-291s levende bet-dict, i SAMME
-# rekkefølge, slik at et menneske kan diffe ledger.csv mot bets.json
-# kolonne for kolonne. `clv` er BT-06s per-bet-felt. De siste seks er
-# rene backtest-provenance-/revisjonsfelt uten noe levende motstykke.
+# rekkefølge, slik at et menneske kan diffe ledger.csv mot botens egen
+# bet-historikk-fil kolonne for kolonne. `clv` er BT-06s per-bet-felt. De
+# siste seks er rene backtest-provenance-/revisjonsfelt uten noe levende
+# motstykke.
 #
 # To bevisste avvik fra den levende dict-en, nedtegnet her fordi begge
 # ellers ville lest som bugs: `value` og `ev` er rå floats her, mens
 # verdi_deteksjon.py:188/:202 formaterer dem som prosent-strenger for den
 # levende CSV-overleveringen (ledgeren konsumeres av metrics.py, ikke av
-# et dashboard). `modell` bærer den levende visningsstrengen
+# noen visningsflate). `modell` bærer den levende visningsstrengen
 # f"{modell_prob:.1%}", mens prediksjonsradens EGET `modell`-felt
 # (MODELL_ETIKETT) flyttes til `modell_etikett` — å gjenbruke navnet
 # `modell` til to ulike ting på tvers av de to filene ville vært verre
@@ -688,3 +699,318 @@ def simuler_bets(prediksjoner, startkapital=config.STARTKAPITAL,
         print("=" * 60)
 
     return ledger, resultat_sim
+
+
+# ---------------------------------------------------------------------------
+# 5. Kjøre-id, manifest og persistering (plan 05-08 Task 2)
+# ---------------------------------------------------------------------------
+
+
+BACKTEST_KATALOG = "backtests"          # Alt kjøre-output havner her, strukturelt adskilt fra botens egne tilstandsfiler
+MANIFEST_FIL = "manifest.json"
+LEDGER_FIL = "ledger.csv"
+RETRENINGS_KADENS = "maanedlig"         # Speiler trenger_retrening sin faktiske kadens — nedtegnet eksplisitt i manifestet
+INNBRENNING_MANEDER = 3                 # D-05-02: antall PROSESSERTE måneder ex-burn-in-settet dropper
+BOOTSTRAP_SEED = 42                     # Matcher metrics.oppsummer_ledger sin egen standardverdi, restatt her med hensikt
+BOOTSTRAP_N_RESAMPLES = 1000
+RUN_ID_MONSTER = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
+
+
+def bygg_konfig_snapshot(resultat_predict, resultat_sim):
+    """
+    Bygger den flate konfig-dict-en manifestet lagrer — de femten
+    strategi-/rapporterings-skalarene et fremtidig before/after-oppgjør
+    trenger.
+
+    Hver verdi leses fra de to teller-dict-ene løpet FAKTISK produserte,
+    ALDRI fra config-modulen direkte, med unntak av `retrenings_kadens`
+    (konstanten over), `holdout_start_dato` (lest fra config, siden den
+    aldri overstyres per løp) og de to bootstrap-verdiene (denne modulens
+    konstanter). Grunnen: tersklene kan overstyres per løp for plan 05-09s
+    sweep, så å lese config her ville registrert modul-standarden mens
+    løpet faktisk brukte noe annet — et manifest som lyver om sine egne
+    input er verre enn intet manifest, og BT-05s "before/after-sammenligning
+    mot dagens tapende live-konfigurasjon" avhenger helt av at denne
+    dict-en er sann.
+    """
+    return {
+        "min_value_terskel": resultat_predict["min_value_terskel"],
+        "min_odds": resultat_predict["min_odds"],
+        "maks_odds": resultat_predict["maks_odds"],
+        "kelly_fraksjon": resultat_sim["kelly_fraksjon"],
+        "flat_innsats": resultat_sim["flat_innsats"],
+        "startkapital": resultat_sim["startkapital"],
+        "min_innsats": resultat_sim["min_innsats"],
+        "maks_innsats": resultat_sim["maks_innsats"],
+        "min_treningskamper": resultat_predict["min_treningskamper"],
+        "kalibrer_andel": resultat_predict["kalibrer_andel"],
+        "retrenings_kadens": RETRENINGS_KADENS,
+        "holdout_start_dato": config.HOLDOUT_START_DATO,
+        "skadefilter_aktiv": resultat_predict["skadefilter_aktiv"],
+        "bootstrap_seed": BOOTSTRAP_SEED,
+        "bootstrap_n_resamples": BOOTSTRAP_N_RESAMPLES,
+    }
+
+
+def bygg_run_id(konfig, tidspunkt=None):
+    """
+    Bygger id-en som `strftime("%Y%m%d-%H%M%S")` av `tidspunkt`
+    (standard `datetime.now()`), en bindestrek, og de første åtte
+    heksadesimale tegnene av SHA-256 av
+    `json.dumps(konfig, sort_keys=True, ensure_ascii=False)` kodet UTF-8.
+
+    `sort_keys=True` er det som gjør at hashen avhenger av konfigens
+    VERDIER, ikke av Pythons dict-innsettingsrekkefølge. Tidsstempel-
+    prefikset gjør at kjøringer sorterer kronologisk i en katalogliste, og
+    hash-suffikset holder to identisk-konfigurerte gjenkjøringer
+    distinkte — begge kravene kommer rett fra 05-CONTEXT.md.
+
+    Hashen er en endrings-detektor, ikke en sikkerhetskontroll: åtte
+    heksadesimale tegn er for menneskelig diffing, og ingenting i dette
+    prosjektet avhenger av at den er kollisjonssikker.
+    """
+    if tidspunkt is None:
+        tidspunkt = datetime.now()
+    tidsdel = tidspunkt.strftime("%Y%m%d-%H%M%S")
+    digest = hashlib.sha256(
+        json.dumps(konfig, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:8]
+    return f"{tidsdel}-{digest}"
+
+
+def _valider_run_id(run_id):
+    """
+    Kaster ValueError med mindre `run_id` matcher `RUN_ID_MONSTER` fullt ut.
+
+    Dette er en sti-sikkerhetskontroll, ikke kosmetikk: `run_id` blir et
+    katalognavn, og mønsteret tillater kun sifre, bindestreker og små
+    heksadesimale bokstaver, så ingen verdi som består kan inneholde en
+    stiseparator, en foreldre-referanse, et innledende punktum eller en
+    null-byte. `bygg_run_id` kan kun produsere gyldige id-er, så denne
+    vakten finnes for tilfellet der en fremtidig kaller — plan 05-10s CLI,
+    mest sannsynlig — sender en inn utenfra.
+    """
+    if not isinstance(run_id, str) or not RUN_ID_MONSTER.fullmatch(run_id):
+        raise ValueError(f"Ugyldig run_id: {run_id!r}")
+
+
+def filtrer_ledger_etter_innbrenning(ledger, maaneder):
+    """
+    Samler det sorterte settet av distinkte `kamp_dato[:7]`-verdier som
+    FINNES i ledgeren, dropper rader hvis måned er blant de første
+    `maaneder` av dem, og returnerer resten.
+
+    Vinduet er definert over måneder TIL STEDE i ledgeren, ikke over
+    kalendermåneder siden startdatoen, av samme grunn plan 05-07 forankrer
+    gjenoppretrening på forrige prosesserte måned: NBA-sesongen har en
+    All-Star-pause og en fire måneder lang sommer, så kalenderaritmetikk
+    ville stille droppet ulik mengde data avhengig av hvor et løps
+    datoområde tilfeldigvis starter.
+
+    Returnerer ledgeren uendret når `maaneder` er null eller falsy.
+    """
+    if not maaneder:
+        return list(ledger)
+    maneder_i_ledger = sorted({rad["kamp_dato"][:7] for rad in ledger})
+    dropp = set(maneder_i_ledger[:maaneder])
+    return [rad for rad in ledger if rad["kamp_dato"][:7] not in dropp]
+
+
+def hent_metrikkserier(ledger):
+    """
+    Returnerer 4-tupelet `(profitter, innsatser, vant_flagg, clv_verdier)`
+    trukket kolonnevis av ledger-radene, med `vant_flagg` utledet av
+    `status == "vant"`.
+
+    Finnes slik at bygg_manifest aldri inlinjer kolonne-uttrekk to ganger
+    (én gang per rapportert vindu), og slik at "kun avgjorte bets når
+    metrikkene" har ETT håndhevelsespunkt: en rad hvis `status` fremdeles
+    er `"venter"` skal aldri nå hit, og simuler_bets garanterer at det
+    ikke kan skje ved å hoppe over uavgjorte rader og telle dem som
+    `bets_uten_utfall`.
+    """
+    profitter = [rad["gevinst"] for rad in ledger]
+    innsatser = [rad["innsats"] for rad in ledger]
+    vant_flagg = [rad["status"] == "vant" for rad in ledger]
+    clv_verdier = [rad["clv"] for rad in ledger]
+    return profitter, innsatser, vant_flagg, clv_verdier
+
+
+def bygg_manifest(run_id, konfig, resultat_predict, resultat_sim, ledger,
+                    type_kjoring="tuning", innbrenning_maaneder=INNBRENNING_MANEDER,
+                    opprettet=None):
+    """
+    Setter sammen manifest-dict-en. Toppnivå-nøkler i denne rekkefølgen:
+    `run_id`, `opprettet`, `type`, `headline`, `konfig`, `periode`,
+    `datakvalitet`, `metrikker`, og — under D-05-02s låste alternativ a —
+    `innbrenning_maaneder`, `innbrenning_fra_dato` og
+    `metrikker_uten_innbrenning`.
+
+    `datakvalitet` er den ærlige rapporterings-flaten for de to
+    data-grensene 05-PLAN-OUTLINE.md flagget som aksepterte i stedet for
+    undersøkte — tynn EU-region-bookmaker-dekning tidlig i 2022-23, og
+    closing-linje-hullene — slik at en leser av manifest.json kan se dem
+    uten å lese noen kode.
+
+    `metrikker` er full-periode-settet og er HOVEDTALLET; `headline`-feltet
+    finnes slik at ingen leser trenger å gjette hvilket sett som er hvilket.
+    `metrikker_uten_innbrenning` er en SENSITIVITETSSJEKK over de samme
+    radene minus de første `innbrenning_maaneder` PROSESSERTE månedene.
+    Begge er billige fordi oppsummer_ledger er dato-uvitende og kan kalles
+    på nytt over en filtrert delmengde av samme cachede ledger.
+    """
+    if opprettet is None:
+        opprettet = datetime.now().isoformat()
+
+    periode = {
+        "fra_dato": resultat_predict["fra_dato"],
+        "til_dato": resultat_predict["til_dato"],
+        "datoer_totalt": resultat_predict["datoer_totalt"],
+        "datoer_behandlet": resultat_predict["datoer_behandlet"],
+        "kamper_totalt": resultat_predict["kamper_totalt"],
+    }
+
+    datakvalitet = {
+        "datoer_hoppet_over_for_lite_treningsgrunnlag": resultat_predict["datoer_hoppet_over_for_lite_treningsgrunnlag"],
+        "kamper_hoppet_over_manglende_odds": resultat_predict["kamper_hoppet_over_manglende_odds"],
+        "kamper_hoppet_over_ukjent_lag": resultat_predict["kamper_hoppet_over_ukjent_lag"],
+        "kamper_uten_closing_snapshot": resultat_predict["kamper_uten_closing_snapshot"],
+        "kandidater_flagget": resultat_predict["kandidater_flagget"],
+        "kandidater_blokkert_av_skadefilter": resultat_predict["kandidater_blokkert_av_skadefilter"],
+        "skadesjekk_uten_datagrunnlag": resultat_predict["skadesjekk_uten_datagrunnlag"],
+        "kandidater_uten_kelly_edge": resultat_sim["kandidater_uten_kelly_edge"],
+        "bets_hoppet_over_duplikat": resultat_sim["bets_hoppet_over_duplikat"],
+        "bets_uten_utfall": resultat_sim["bets_uten_utfall"],
+        "datoer_stoppet_lav_bankroll": resultat_sim["datoer_stoppet_lav_bankroll"],
+        "bets_uten_clv": resultat_sim["bets_uten_clv"],
+        "retreninger": resultat_predict["retreninger"],
+        "sluttsaldo": resultat_sim["sluttsaldo"],
+    }
+
+    profitter, innsatser, vant_flagg, clv_verdier = hent_metrikkserier(ledger)
+    metrikker = oppsummer_ledger(
+        profitter, innsatser, vant_flagg, konfig["startkapital"],
+        clv_verdier=clv_verdier, n_resamples=BOOTSTRAP_N_RESAMPLES, seed=BOOTSTRAP_SEED,
+    )
+
+    manifest = {
+        "run_id": run_id,
+        "opprettet": opprettet,
+        "type": type_kjoring,
+        "headline": "metrikker",
+        "konfig": konfig,
+        "periode": periode,
+        "datakvalitet": datakvalitet,
+        "metrikker": metrikker,
+    }
+
+    if innbrenning_maaneder:
+        ledger_uten_innbrenning = filtrer_ledger_etter_innbrenning(ledger, innbrenning_maaneder)
+        manifest["innbrenning_maaneder"] = innbrenning_maaneder
+        manifest["innbrenning_fra_dato"] = (
+            min(rad["kamp_dato"] for rad in ledger_uten_innbrenning)
+            if ledger_uten_innbrenning else None
+        )
+        p2, i2, v2, c2 = hent_metrikkserier(ledger_uten_innbrenning)
+        manifest["metrikker_uten_innbrenning"] = oppsummer_ledger(
+            p2, i2, v2, konfig["startkapital"],
+            clv_verdier=c2, n_resamples=BOOTSTRAP_N_RESAMPLES, seed=BOOTSTRAP_SEED,
+        )
+
+    return manifest
+
+
+def skriv_kjoring(run_id, manifest, ledger, katalog=BACKTEST_KATALOG):
+    """
+    Validerer `run_id`, oppretter `<katalog>/<run_id>/` og skriver
+    `manifest.json` + `ledger.csv` inn i den.
+
+    To garantier denne funksjonen finnes for å gi: `os.makedirs` UTEN
+    `exist_ok` betyr at en eksisterende `run_id` kaster `FileExistsError`
+    i stedet for å stille overskrive et tidligere løps bevis; og alt som
+    skrives havner under `backtests/`, strukturelt adskilt fra botens
+    egne tilstandsfiler for den ekte paper-trading-historikken, slik at
+    simulerte penger aldri kan forveksles med den (05-CONTEXT.md sin
+    eksplisitte advarsel, arvet fra .planning/research/ARCHITECTURE.md).
+    """
+    _valider_run_id(run_id)
+
+    run_sti = os.path.join(katalog, run_id)
+    katalog_abs = os.path.abspath(katalog)
+    run_abs = os.path.abspath(run_sti)
+    if not run_abs.startswith(katalog_abs + os.sep):
+        raise ValueError(f"run_id løser til en sti utenfor {katalog!r}: {run_sti!r}")
+
+    os.makedirs(run_sti)   # UTEN exist_ok — en eksisterende kjøring skal ALDRI overskrives
+
+    manifest_sti = os.path.join(run_sti, MANIFEST_FIL)
+    with open(manifest_sti, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+    ledger_sti = os.path.join(run_sti, LEDGER_FIL)
+    pd.DataFrame(ledger, columns=LEDGER_KOLONNER).to_csv(ledger_sti, index=False)
+
+    return run_sti
+
+
+def kjor_og_lagre(data, holdout=False, katalog=BACKTEST_KATALOG, tidspunkt=None,
+                    min_value_terskel=config.MIN_VALUE_TERSKEL,
+                    min_odds=config.MIN_ODDS,
+                    maks_odds=config.MAX_ODDS,
+                    min_treningskamper=MIN_TRENINGSKAMPER,
+                    kalibrer_andel=model.KALIBRER_ANDEL,
+                    bruk_skadefilter=True,
+                    startkapital=config.STARTKAPITAL,
+                    kelly_fraksjon=config.KELLY_FRAKSJON,
+                    min_innsats=config.MIN_INNSATS,
+                    maks_innsats=config.MAX_INNSATS,
+                    flat_innsats=None,
+                    innbrenning_maaneder=INNBRENNING_MANEDER,
+                    skriv_ut=True):
+    """
+    Komponerer predict-passet, deretter simuleringspasset, bygger
+    manifestet og skriver løpet — funksjonen plan 05-10s
+    08_kjor_backtest.py kaller. Plan 05-09s Kelly-sweep kaller den BEVISST
+    IKKE: sweepen gjenbruker ett cachet predict-pass og kaller simuler_bets
+    per fraksjon i stedet.
+
+    Når `holdout` er sann kalles den holdout-inngangen; når den er usann
+    kalles kjor_backtest. Setter ALDRI det låste holdout-overstyrings-
+    flagget sant noe sted i denne funksjonen — omtal alltid oppførselen i
+    prosa som "holdout-inngangen", aldri som en direkte tilordning av flagget.
+
+    Inneholder ingen forsøk-fangst-blokk: en HoldoutLaastFeil fra
+    predict-passet må nå kalleren med INGEN kjøre-katalog opprettet, og det
+    er derfor skrivingen skjer strengt ETTER at begge passene er ferdige i
+    stedet for underveis.
+
+    Manifestets `type`-felt settes fra `holdout`-argumentet, slik at et
+    holdout-løp er identifiserbart fra sitt eget manifest uten å konsultere
+    STATE.md.
+    """
+    felles_kwargs = dict(
+        min_value_terskel=min_value_terskel, min_odds=min_odds, maks_odds=maks_odds,
+        min_treningskamper=min_treningskamper, kalibrer_andel=kalibrer_andel,
+        bruk_skadefilter=bruk_skadefilter, skriv_ut=skriv_ut,
+    )
+    if holdout:
+        prediksjoner, resultat_predict = kjor_endelig_holdout_backtest(data, **felles_kwargs)
+    else:
+        prediksjoner, resultat_predict = kjor_backtest(data, **felles_kwargs)
+
+    ledger, resultat_sim = simuler_bets(
+        prediksjoner, startkapital=startkapital, kelly_fraksjon=kelly_fraksjon,
+        min_innsats=min_innsats, maks_innsats=maks_innsats, flat_innsats=flat_innsats,
+        skriv_ut=skriv_ut,
+    )
+
+    konfig = bygg_konfig_snapshot(resultat_predict, resultat_sim)
+    run_id = bygg_run_id(konfig, tidspunkt=tidspunkt)
+    type_kjoring = "holdout" if holdout else "tuning"
+    manifest = bygg_manifest(
+        run_id, konfig, resultat_predict, resultat_sim, ledger,
+        type_kjoring=type_kjoring, innbrenning_maaneder=innbrenning_maaneder,
+    )
+    sti = skriv_kjoring(run_id, manifest, ledger, katalog=katalog)
+
+    return sti, manifest, ledger
