@@ -2,8 +2,8 @@
 phase: 5
 slug: walk-forward-backtest-engine
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-08-24
 ---
 
@@ -39,7 +39,7 @@ created: 2026-08-24
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 05-07-02 | 05-07 | 5 | BT-01 | T-05-07-07 | Walk-forward loop produces a ledger for a small synthetic date range | unit/integration | `pytest tests/test_backtest.py::test_kjor_backtest_produserer_ledger -x` | ✅ tests/test_backtest.py | ✅ green |
-| 05-07-03 | 05-07 | 5 | BT-02 | T-05-07-05 | Feature/odds/injury lookups never see data dated `>= as_of` | unit (leakage regression, extends `test_parity.py`) | `pytest tests/test_parity.py -x` | ✅ tests/test_backtest.py | ✅ green |
+| 05-11-01 | 05-11 | 8 | BT-02 | T-05-11-01, T-05-11-02 | Feature/odds/injury lookups never see data dated `>= as_of` | unit (leakage regression, extends `test_parity.py`) | `pytest tests/test_parity.py -x` | ✅ utvidet | ✅ green |
 | 05-07-01 | 05-07 | 5 | BT-03 | T-05-07-01 | `kjor_backtest()` raises `HoldoutLaastFeil` for any date `>= HOLDOUT_START_DATO` unless called via `kjor_endelig_holdout_backtest()` | unit | `pytest tests/test_backtest.py::test_holdout_guard_reiser_feil -x` | ✅ tests/test_backtest.py | ✅ green |
 | 05-08-02 | 05-08 | 6 | BT-04 | T-05-08-06 | `bootstrap_roi_ci`/`wilson_ci` match hand-calculated values on a known synthetic bet sequence | unit | `pytest tests/test_metrics.py::test_bootstrap_roi_ci_kjente_verdier -x` | ✅ tests/test_metrics.py + tests/test_backtest.py | ✅ green |
 | 05-08-02 | 05-08 | 6 | BT-05 | T-05-08-04 | `manifest.json` round-trips config + metrics correctly, `run_id` unique per config | unit | `pytest tests/test_backtest.py::test_manifest_inneholder_konfig_og_metrikker -x` | ✅ tests/test_backtest.py | ✅ green |
@@ -54,11 +54,44 @@ created: 2026-08-24
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_model.py` — covers `model.py::tren()`'s one-shot vs. walk-forward split behavior
-- [ ] `tests/test_backtest.py` — covers the walk-forward loop, holdout guard, and Kelly-sweep caching
-- [ ] `tests/test_metrics.py` — covers bootstrap CI, Wilson interval, CLV, drawdown arithmetic against hand-calculated synthetic values
-- [ ] Extend `tests/test_parity.py` per its own existing docstring instruction — add the live-vs-backtest side-by-side decision-parity assertion once `backtest.py` exists
-- [ ] `tests/test_skadefilter.py` — new as-of-aware test cases using an injected synthetic player-log fixture (no network), mirroring the existing `siste3`/`sesong_snitt` injection pattern already used for the live path (required since the injury-filter backtest is in scope per 05-CONTEXT.md's Post-Research Resolution)
+- [x] `tests/test_model.py` — covers `model.py::tren()`'s one-shot vs. walk-forward split behavior. Verified: `pytest tests/test_model.py -q` -> `13 passed` (as part of the plan 05-11 quick-run: `pytest tests/test_backtest.py tests/test_metrics.py tests/test_model.py -q` -> `140 passed in 23.61s`).
+- [x] `tests/test_backtest.py` — covers the walk-forward loop, holdout guard, and Kelly-sweep caching. Verified: `104` tests collected, green in the same quick-run above.
+- [x] `tests/test_metrics.py` — covers bootstrap CI, Wilson interval, CLV, drawdown arithmetic against hand-calculated synthetic values. Verified: `23` tests collected, green in the same quick-run above.
+- [x] Extend `tests/test_parity.py` per its own existing docstring instruction — add the live-vs-backtest side-by-side decision-parity assertion once `backtest.py` exists. Verified: `pytest tests/test_parity.py -x -q` -> `17 passed` (plan 05-11, this row's own locked command).
+- [x] `tests/test_skadefilter.py` — new as-of-aware test cases using an injected synthetic player-log fixture (no network), mirroring the existing `siste3`/`sesong_snitt` injection pattern already used for the live path (required since the injury-filter backtest is in scope per 05-CONTEXT.md's Post-Research Resolution). Verified: `pytest tests/test_skadefilter.py -q` -> `22 passed in 0.21s`, run directly by plan 05-11 rather than inferred from the full-suite total.
+
+---
+
+## Full-suite gate (plan 05-11)
+
+Run from the repo root with the venv active (`source venv/bin/activate`), 2026-08-28:
+
+**Command:** `python3 -m pytest tests/ -q`
+
+**Verbatim final summary line:** `344 passed, 45 warnings in 53.68s`
+
+**Collected count:** `344` tests (`python3 -m pytest tests/ -q --collect-only` -> `344 tests collected in 1.29s`), strictly above the pre-Phase-5 baseline of `129`.
+
+**Per-file collected counts (from the same `--collect-only` run):**
+
+| File | Collected |
+|------|-----------|
+| `tests/test_parity.py` | 17 |
+| `tests/test_backtest.py` | 104 |
+| `tests/test_metrics.py` | 23 |
+| `tests/test_model.py` | 13 |
+| `tests/test_spillerlogg.py` | 11 |
+| `tests/test_skadefilter.py` | 22 |
+
+**BT-02 row's own locked command, run and observed independently:** `python3 -m pytest tests/test_parity.py -x -q` -> `17 passed in 1.62s`.
+
+**Quick-run command (05-VALIDATION.md's declared command):** `python3 -m pytest tests/test_backtest.py tests/test_metrics.py tests/test_model.py -q` -> `140 passed, 45 warnings in 23.61s`.
+
+**Plan 05-10 landed at gate time:** yes. `08_kjor_backtest.py` exists and `python3 08_kjor_backtest.py --help` exits `0`, printing the full CLI argument list (`--fra`, `--til`, `--sweep`, `--holdout`, `--bekreft-holdout`, `--uten-skadefilter`, threshold/odds/Kelly/startkapital overrides, `--min-treningskamper`, `--features-fil`, `--arkiv`, `--katalog`, `--stille`). The gate therefore covers all ten landed plans of the outline (05-01 through 05-10) plus this plan's own extension of `tests/test_parity.py`.
+
+**Zero failures, zero errors.** The only pytest warnings observed are xgboost's own `UserWarning: Parameters: { "use_label_encoder" } are not used.`, unrelated to this plan or to Phase 5's test additions — pre-existing noise from the pinned `xgboost` version, not a new finding.
+
+**No production file modified by this plan:** `git diff --name-only backtest.py odds.py verdi_deteksjon.py strategy.py config.py features.py model.py metrics.py skadefilter.py spillerlogg.py teams.py` — empty.
 
 ---
 
