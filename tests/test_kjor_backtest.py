@@ -171,3 +171,190 @@ def test_ingen_bar_except_i_cli():
     except_linjer = [l for l in ikke_kommentarlinjer if l.strip().startswith("except")]
     for linje in except_linjer:
         assert "FileNotFoundError" in linje or "ValueError" in linje, linje
+
+
+# ---------------------------------------------------------------------------
+# 2. Dispatch, holdout-kombinasjoner og oppsummeringsutskrift (Task 2)
+# ---------------------------------------------------------------------------
+
+
+def _fake_manifest(**overrides):
+    manifest = {
+        "run_id": "20260101-000000-deadbeef",
+        "type": "tuning",
+        "periode": {
+            "fra_dato": "2022-11-01", "til_dato": "2022-11-30",
+            "datoer_totalt": 5, "datoer_behandlet": 5, "kamper_totalt": 12,
+        },
+        "datakvalitet": {
+            "kamper_hoppet_over_manglende_odds": 3,
+            "kandidater_flagget": 2,
+            "kandidater_blokkert_av_skadefilter": 1,
+            "retreninger": 1,
+        },
+        "metrikker": {
+            "antall_bets": 4, "roi": 0.123, "roi_ci_nedre": -0.05,
+            "roi_ci_oevre": 0.30, "vinnrate": 0.5,
+            "maks_drawdown_andel": 0.1, "maks_drawdown_kroner": 12.0,
+            "clv_snitt": 0.01, "antall_uten_clv": 0, "bootstrap_seed": 42,
+        },
+    }
+    manifest.update(overrides)
+    return manifest
+
+
+def _kjor_main(cli, monkeypatch, argv, manifest=None):
+    """
+    Kjører cli.main() med sys.argv patchet og backtest.klargjor_backtestdata/
+    backtest.kjor_og_lagre erstattet med spioner som aldri rører disk eller
+    nettverk. Returnerer (last_kall, kjor_kall, avslutningskode) —
+    nøkkelordargumentene hvert spionert kall ble mottatt med, pluss
+    SystemExit-koden main() endte med.
+    """
+    last_kall = {}
+    kjor_kall = {}
+
+    def fake_last(**kwargs):
+        last_kall.update(kwargs)
+        return {"features_df": None, "datoer": [], "spillerlogg_df": None, "con": None}
+
+    def fake_kjor(data, **kwargs):
+        kjor_kall.update(kwargs)
+        return ("backtests/FAKE-KJORING", manifest or _fake_manifest(), [])
+
+    monkeypatch.setattr(backtest, "klargjor_backtestdata", fake_last)
+    monkeypatch.setattr(backtest, "kjor_og_lagre", fake_kjor)
+    monkeypatch.setattr(sys, "argv", ["08_kjor_backtest.py"] + argv)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    return last_kall, kjor_kall, exc_info.value.code
+
+
+def test_standardkjoring_ber_om_tuning(cli, monkeypatch):
+    last_kall, kjor_kall, exit_code = _kjor_main(cli, monkeypatch, [])
+    assert exit_code == 0
+    assert not kjor_kall.get("holdout", False)
+    assert kjor_kall.get("kjor_sweep") is False
+    assert last_kall["fra"] is None
+    assert last_kall["til"] == cli.dag_for_holdout()
+    assert last_kall["til"] < config.HOLDOUT_START_DATO
+
+
+def test_eksplisitt_til_overstyrer_standarden(cli, monkeypatch):
+    last_kall, _, exit_code = _kjor_main(
+        cli, monkeypatch, ["--fra", "2023-01-02", "--til", "2023-02-01"]
+    )
+    assert exit_code == 0
+    assert last_kall["fra"] == "2023-01-02"
+    assert last_kall["til"] == "2023-02-01"
+
+    last_kall2, _, exit_code2 = _kjor_main(cli, monkeypatch, ["--fra", "2023-01-02"])
+    assert exit_code2 == 0
+    assert last_kall2["fra"] == "2023-01-02"
+    assert last_kall2["til"] == cli.dag_for_holdout()
+
+
+def test_sweep_flagget_slaar_paa_sweep(cli, monkeypatch):
+    _, kjor_kall, exit_code = _kjor_main(cli, monkeypatch, ["--sweep"])
+    assert exit_code == 0
+    assert kjor_kall["kjor_sweep"] is True
+    assert not kjor_kall.get("holdout", False)
+
+
+def test_holdout_krever_bekreftelse(tmp_path):
+    katalog = tmp_path / "ubrukt"
+    resultat = _kjor_cli(["--holdout", "--katalog", str(katalog)])
+    assert resultat.returncode == 2
+    assert "bekreft-holdout" in resultat.stderr
+    assert "én gang" in resultat.stderr or "ÉN GANG" in resultat.stderr
+    assert not katalog.exists()
+
+
+def test_bekreftelse_uten_holdout_avvises(tmp_path):
+    katalog = tmp_path / "ubrukt"
+    resultat = _kjor_cli(["--bekreft-holdout", "--katalog", str(katalog)])
+    assert resultat.returncode == 2
+    assert not katalog.exists()
+
+
+def test_holdout_og_sweep_avvises(tmp_path):
+    katalog = tmp_path / "ubrukt"
+    resultat = _kjor_cli([
+        "--holdout", "--bekreft-holdout", "--sweep", "--katalog", str(katalog),
+    ])
+    assert resultat.returncode == 2
+    assert not katalog.exists()
+
+
+def test_holdout_med_datoomrade_avvises(tmp_path):
+    for i, flagg in enumerate([["--fra", "2024-11-01"], ["--til", "2024-11-15"]]):
+        katalog = tmp_path / f"ubrukt-{i}"
+        resultat = _kjor_cli([
+            "--holdout", "--bekreft-holdout", *flagg, "--katalog", str(katalog),
+        ])
+        assert resultat.returncode == 2, flagg
+        assert not katalog.exists()
+
+
+def test_holdout_veien_kaller_motoren_med_holdout(cli, monkeypatch):
+    last_kall, kjor_kall, exit_code = _kjor_main(
+        cli, monkeypatch, ["--holdout", "--bekreft-holdout"],
+        manifest=_fake_manifest(type="holdout"),
+    )
+    assert exit_code == 0
+    assert kjor_kall["holdout"] is True
+    assert not kjor_kall.get("kjor_sweep", False)
+    assert last_kall["fra"] is None
+    assert last_kall["til"] is None
+
+
+def test_bare_holdout_funksjonen_apner_vinduet(cli):
+    kilde = open("08_kjor_backtest.py", encoding="utf-8").read()
+    holdout_kilde = inspect.getsource(cli.kjor_holdout)
+    rest_linjer = [
+        l for l in kilde.replace(holdout_kilde, "").splitlines()
+        if not l.strip().startswith("#")
+    ]
+    rest = "\n".join(rest_linjer)
+    assert "holdout=True" not in rest
+
+
+def test_terskler_naar_motoren(cli, monkeypatch):
+    _, kjor_kall, exit_code = _kjor_main(cli, monkeypatch, [
+        "--min-value-terskel", "0.10", "--min-odds", "1.20", "--maks-odds", "3.00",
+        "--kelly-fraksjon", "0.25", "--startkapital", "500", "--min-treningskamper", "250",
+    ])
+    assert exit_code == 0
+    assert kjor_kall["min_value_terskel"] == 0.10
+    assert kjor_kall["min_odds"] == 1.20
+    assert kjor_kall["maks_odds"] == 3.00
+    assert kjor_kall["kelly_fraksjon"] == 0.25
+    assert kjor_kall["startkapital"] == 500.0
+    assert kjor_kall["min_treningskamper"] == 250
+
+
+def test_uten_skadefilter_naar_bade_lasting_og_kjoring(cli, monkeypatch):
+    last_kall, kjor_kall, exit_code = _kjor_main(cli, monkeypatch, ["--uten-skadefilter"])
+    assert exit_code == 0
+    assert last_kall["bruk_skadefilter"] is False
+    assert kjor_kall["bruk_skadefilter"] is False
+
+
+def test_cli_skriver_run_id_og_hoppetellere(cli, monkeypatch, capsys):
+    _, _, exit_code = _kjor_main(cli, monkeypatch, [])
+    assert exit_code == 0
+    ut = capsys.readouterr().out
+    assert "20260101-000000-deadbeef" in ut
+    assert "backtests/FAKE-KJORING" in ut
+    assert "4" in ut          # antall_bets
+    assert "12.3%" in ut      # roi .1%
+    assert "3" in ut          # kamper_hoppet_over_manglende_odds
+
+
+def test_cli_rorer_ikke_live_tilstand():
+    kilde = open("08_kjor_backtest.py", encoding="utf-8").read()
+    assert "bankroll.json" not in kilde
+    assert "bets.json" not in kilde
+    assert "dashboard" not in kilde
