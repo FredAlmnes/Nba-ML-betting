@@ -29,6 +29,8 @@ from teams import finn_lag_id
 # -------------------------------------------------------
 ANTALL_TOPPSPILLERE = 3     # Sjekk de N viktigste spillerne per lag
 MIN_MINUTTER = 20           # Ignorer spillere med under 20 min/kamp (sesongsnitt)
+SISTE_N_KAMPER = 3           # Speiler live-veiens LeagueDashPlayerStats(last_n_games=3) -- lagets N siste kamper, aldri uavhengig utledet på nytt i as-of-veien
+SPILLERLOGG_KOLONNER = ["PLAYER_ID", "PLAYER_NAME", "TEAM_ID", "GAME_DATE", "MIN"]  # Delmengden av plan 05-05s nba_spillerlogg_raw.csv denne modulen trenger; SESONG og GAME_ID finnes i filen men brukes ikke her
 
 
 def gjeldende_sesong():
@@ -244,3 +246,180 @@ def skriv_skadefilter_csv(resultat_df, sti="value_bets_med_skadefilter.csv"):
     """Skriver skadefilter-resultatet til CSV og bekrefter med en print."""
     resultat_df.to_csv(sti, index=False)
     print(f"\nResultat lagret til '{sti}'")
+
+
+# ---------------------------------------------------------------------
+# As-of-vei (plan 05-06, Fase 5s walk-forward-backtest)
+#
+# Alt under her er additivt og parallelt til funksjonene over -- ingen av
+# de eksisterende live-funksjonene (gjeldende_sesong, hent_spillerdata,
+# hent_spillerstatistikk, hent_toppspillere_for_lag, sjekk_spiller,
+# sjekk_lag_helse, filtrer_bets_for_skader, skriv_skadefilter_csv) er
+# endret. 06_bot.py og 05_skadefilter.py trenger dem byte-identiske.
+#
+# Denne modulen importerer bevisst IKKE spillerlogg -- DataFramen
+# injiseres alltid av kalleren (backtest.py i plan 05-07), slik at
+# avhengighetsretningen forblir backtest -> {spillerlogg, skadefilter}
+# og live-importgrafen 06_bot.py bruker er uendret.
+# ---------------------------------------------------------------------
+
+
+def sesong_grenser_for_dato(dato):
+    """
+    Speiler gjeldende_sesong()s år/måned>=10-logikk, men tar datoen som
+    PARAMETER i stedet for å lese systemklokken -- denne parameteriseringen
+    ER as-of-fiksen. En backtest som i stedet kalte gjeldende_sesong() ville
+    stille scope hver historiske dato til den ekte, nåværende sesongen.
+
+    Godtar en "YYYY-MM-DD"-streng eller et pd.Timestamp. Returnerer
+    (sesong_start, sesong_slutt) som "YYYY-10-01"-strenger, der
+    sesong_slutt er EKSKLUSIV.
+    """
+    ts = pd.Timestamp(dato)
+    if ts.month >= 10:
+        return f"{ts.year}-10-01", f"{ts.year + 1}-10-01"
+    return f"{ts.year - 1}-10-01", f"{ts.year}-10-01"
+
+
+def valider_spillerlogg(spillerlogg_df):
+    """
+    Ren vaktfunksjon -- kaster ValueError ved brudd i stedet for å hoppe
+    over og logge, i motsetning til resten av modulen. En manglende
+    kolonne eller en datetime-typet GAME_DATE gjør at nedstrøms-filteret
+    ikke matcher noe, som leses som "ingen nøkkelspillere funnet" og lar
+    ethvert lag passere ubetinget -- en usynlig oppadgående ROI-bias
+    fremfor en synlig feil. En tom, men korrekt kolonneskjema-rammer er
+    lovlig og skal passere.
+    """
+    manglende = [k for k in SPILLERLOGG_KOLONNER if k not in spillerlogg_df.columns]
+    if manglende:
+        raise ValueError(f"spillerlogg_df mangler påkrevde kolonner: {manglende}")
+
+    if pd.api.types.is_datetime64_any_dtype(spillerlogg_df["GAME_DATE"]):
+        raise ValueError(
+            "GAME_DATE er datetime-typet, forventet YYYY-MM-DD-streng. "
+            "Last spillerloggen via spillerlogg.les_spillerlogg(), som tvinger dtype=str."
+        )
+
+
+def hent_sesonglogg_som_of(spillerlogg_df, team_id, as_of_dato):
+    """
+    Det ENESTE as-of-sjekkpunktet i denne modulen. Strengt < på
+    as_of_dato, ALDRI <= -- en kamp spilt på beslutningsdatoen er ikke
+    kjent når betten legges, samme regel features.py følger og
+    tests/test_parity.py::test_grenserad_paa_as_of_er_ekskludert allerede
+    vokter der. sesong_slutt er bevisst ubrukt som øvre grense fordi
+    as_of_dato alltid er den strammeste grensen innenfor sin egen sesong.
+    Enhver as-of-filtrering i denne modulen skal rute gjennom denne ene
+    funksjonen, slik at lekkasjegrensen bor på nøyaktig ett sted.
+    """
+    valider_spillerlogg(spillerlogg_df)
+    as_of_dato = pd.Timestamp(as_of_dato).strftime("%Y-%m-%d")
+    sesong_start, sesong_slutt = sesong_grenser_for_dato(as_of_dato)
+
+    rader = spillerlogg_df[
+        (spillerlogg_df["TEAM_ID"] == team_id)
+        & (spillerlogg_df["GAME_DATE"] >= sesong_start)
+        & (spillerlogg_df["GAME_DATE"] < as_of_dato)
+    ]
+    return rader.sort_values("GAME_DATE").reset_index(drop=True)
+
+
+def hent_toppspillere_som_of(sesong_logg, antall=ANTALL_TOPPSPILLERE):
+    """
+    As-of-analogen til hent_toppspillere_for_lag. Den ene bevisste
+    forskjellen fra live-veien: dette er et sesong-til-dato-snitt, ikke
+    et fullsesong-snitt, fordi fullsesong-tallet ikke er kjent per
+    as_of_dato. Returnerer samme record-form som hent_toppspillere_for_lag
+    (PLAYER_ID, PLAYER_NAME, MIN), slik at sjekk_spiller konsumerer den
+    uendret. Tom liste for en tom input-ramme, ikke en exception.
+    """
+    if sesong_logg.empty:
+        return []
+
+    snitt = sesong_logg.groupby("PLAYER_ID", as_index=False).agg(
+        MIN=("MIN", "mean"),
+        PLAYER_NAME=("PLAYER_NAME", "first"),
+    )
+    topp = snitt[snitt["MIN"] >= MIN_MINUTTER].sort_values("MIN", ascending=False).head(antall)
+    return topp[["PLAYER_ID", "PLAYER_NAME", "MIN"]].to_dict("records")
+
+
+def bygg_siste3_som_of(sesong_logg, antall_kamper=SISTE_N_KAMPER):
+    """
+    Adapteren som lar sjekk_spiller gjenbrukes uendret. Vinduet er
+    LAGETS siste N kampdatoer (ikke spillerens egne siste N opptredener),
+    fordi det er nøyaktig det live last_n_games=3-spørringen måler, og
+    den eneste definisjonen der en skadet spiller kan registreres som
+    fraværende. Kun MIN > 0-rader telles, fordi en null-minutt-rad er et
+    DNP og å telle den som en spilt kamp ville skape falsk trygghet --
+    samme konservative retning plan 05-05 valgte da null MIN ble tvunget
+    til 0.0. En spiller som ikke opptrer i noen av vindusrader er ganske
+    enkelt fraværende fra resultatet, som sjekk_spiller allerede
+    rapporterer som "0 kamper siste 3".
+    """
+    kolonner = ["PLAYER_ID", "PLAYER_NAME", "TEAM_ID", "MIN", "GP"]
+    if sesong_logg.empty:
+        return pd.DataFrame(columns=kolonner)
+
+    siste_datoer = sorted(sesong_logg["GAME_DATE"].unique())[-antall_kamper:]
+    vindu = sesong_logg[
+        sesong_logg["GAME_DATE"].isin(siste_datoer) & (sesong_logg["MIN"] > 0)
+    ]
+    if vindu.empty:
+        return pd.DataFrame(columns=kolonner)
+
+    siste3 = vindu.groupby("PLAYER_ID", as_index=False).agg(
+        PLAYER_NAME=("PLAYER_NAME", "first"),
+        TEAM_ID=("TEAM_ID", "first"),
+        MIN=("MIN", "mean"),
+        GP=("MIN", "count"),
+    )
+    return siste3[kolonner]
+
+
+def sjekk_lag_helse_som_of(spillerlogg_df, team_id, lagnavn, as_of_dato, antall=ANTALL_TOPPSPILLERE, skriv_ut=False):
+    """
+    Inngangspunktet plan 05-07 kaller. Strukturelt identisk med
+    sjekk_lag_helse sin løkke, men datakilden er spillerlogg_df
+    (injisert, aldri hentet via nettverk) i stedet for live
+    siste3/sesong_snitt.
+
+    Returnerer en dict med samme første tre nøkler som sjekk_lag_helse
+    (lagnavn, tilgjengelig, advarsler) slik at backtest.py kan behandle
+    live- og as-of-resultater likt, pluss to additive diagnostikk-nøkler:
+    antall_toppspillere og antall_kamprader. Et lag uten spillerlogg-
+    dekning gir null toppspillere og dermed tilgjengelig=True vacuously,
+    akkurat som live-veien når ingen klarer MIN_MINUTTER -- tellerne lar
+    backtest.py rapportere hvor mange skadesjekker som kjørte på tomt
+    datagrunnlag i kjøre-manifestet i stedet for å absorbere dem stille
+    som friske.
+
+    skriv_ut er False som standard fordi denne kjører omtrent to ganger
+    per kampdato over ~480 datoer i walk-forward-løkken; live-veien
+    printer fordi den kjører én gang, interaktivt, per dag.
+    """
+    sesong_logg = hent_sesonglogg_som_of(spillerlogg_df, team_id, as_of_dato)
+    toppspillere = hent_toppspillere_som_of(sesong_logg, antall)
+    siste3 = bygg_siste3_som_of(sesong_logg)
+
+    resultat = {
+        "lagnavn": lagnavn,
+        "tilgjengelig": True,
+        "advarsler": [],
+        "antall_toppspillere": len(toppspillere),
+        "antall_kamprader": len(sesong_logg),
+    }
+
+    if skriv_ut:
+        print(f"  {lagnavn}:")
+    for sp in toppspillere:
+        ok, melding = sjekk_spiller(siste3, sp["PLAYER_ID"], sp["PLAYER_NAME"], sp["MIN"])
+        if skriv_ut:
+            ikon = "✅" if ok else "⚠️ "
+            print(f"    {ikon} {melding}")
+        if not ok:
+            resultat["tilgjengelig"] = False
+            resultat["advarsler"].append(melding)
+
+    return resultat
