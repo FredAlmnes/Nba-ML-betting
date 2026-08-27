@@ -625,6 +625,14 @@ def simuler_bets(prediksjoner, startkapital=config.STARTKAPITAL,
             innsats = beregn_innsats_for_kandidat(
                 p, saldo, kelly_fraksjon, min_innsats, maks_innsats, flat_innsats
             )
+            # Kastes eksplisitt til en ren Python-float: modell_prob kommer
+            # fra xgboost sin predict_proba som numpy.float32, og strategy.
+            # beregn_innsats sin aritmetikk (og saldo-akkumuleringen under)
+            # arver den dtypen uendret. En numpy.float32 saldo/innsats er
+            # ikke json.dumps-serialiserbar — samme klasse funn metrics.py
+            # allerede kaster vakt mot (T-05-08-09), her fanget av
+            # Task 3s ekte-data-røyktest i stedet for i produksjon.
+            innsats = float(innsats)
             if innsats == 0.0 and flat_innsats is None:
                 resultat_sim["kandidater_uten_kelly_edge"] += 1
                 continue
