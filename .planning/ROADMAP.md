@@ -192,7 +192,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 05-07-PLAN.md — backtest.py: prediksjonspass, HoldoutLaastFeil og den strukturelle holdout-vakten
+- [x] 05-07-PLAN.md — backtest.py: prediksjonspass, HoldoutLaastFeil og den strukturelle holdout-vakten
 
 **Wave 6** *(blocked on Wave 5)*
 
@@ -226,4 +226,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 9/9 | Complete   | 2026-08-24 |
-| 5. Walk-Forward Backtest Engine | 6/13 | In Progress|  |
+| 5. Walk-Forward Backtest Engine | 7/13 | In Progress|  |
