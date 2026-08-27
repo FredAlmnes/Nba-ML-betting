@@ -19,6 +19,7 @@ modul-nivå I/O gjøres — all fil-/database-lesing skjer inne i
 klargjor_backtestdata(), kalt eksplisitt av kalleren.
 """
 
+import copy
 import hashlib
 import json
 import os
@@ -1022,3 +1023,182 @@ def kjor_og_lagre(data, holdout=False, katalog=BACKTEST_KATALOG, tidspunkt=None,
     sti = skriv_kjoring(run_id, manifest, ledger, katalog=katalog)
 
     return sti, manifest, ledger
+
+
+# ---------------------------------------------------------------------------
+# 6. Kelly-sweep: samme prediksjoner, ulik innsats (plan 05-09 Task 1)
+# ---------------------------------------------------------------------------
+
+
+SWEEP_FIL = "kelly_sweep.json"   # Skrives inn i den eksisterende kjøre-katalogen, ved siden av manifest.json
+
+# BT-07s fire staking-armer, i rekkefølgen de rapporteres. Flat-armens
+# fraksjon er None, ALDRI 0 — strategy.beregn_innsats returnerer 0.0 for
+# hvert bet ved kelly_fraksjon=0 (05-RESEARCH.md Pitfall 6), så en arm
+# definert med fraksjon 0 ville produsert en tom arm som leser som "flat
+# staking taper aldri". config.KELLY_FRAKSJON må alltid være med blant de
+# swipte fraksjonene, slik at sweepen alltid inneholder den levende
+# stake-regelen den sammenlignes mot.
+KELLY_ARMER = (
+    ("flat", None),
+    ("kvart", 0.25),
+    ("halv", 0.5),
+    ("full", 1.0),
+)
+
+
+def _sikre_prediksjoner_utenfor_holdout(prediksjoner):
+    """
+    Samler de distinkte verdiene av BÅDE as_of_dato og kamp_dato på tvers
+    av de cachede radene, og kaller _sikre_ikke_holdout én gang per
+    distinkt dato, uten et andre argument slik at standardverdien
+    (avvist) gjelder. Returnerer ingenting.
+
+    En sweep er per definisjon en tuning-aktivitet — den finnes for å
+    VELGE en staking-regel — så den tar bevisst intet unntaksflagg og
+    delegerer hele sammenligningen til plan 05-07s vakt i stedet for å
+    gjenta grensen selv: én sammenligning i hele kodebasen, ett sted å ta
+    feil.
+
+    Begge datofeltene sjekkes, selv om walk-forward-løkken i dag alltid
+    setter dem like, fordi denne funksjonen kan kalles av HVILKEN SOM
+    HELST kaller med HVILKEN SOM HELST liste med rader — en antakelse som
+    kun holder på grunn av hvordan dagens produsent tilfeldigvis er bygget
+    er ingen kontroll.
+    """
+    datoer = set()
+    for p in prediksjoner:
+        datoer.add(p["as_of_dato"])
+        datoer.add(p["kamp_dato"])
+    for dato in datoer:
+        _sikre_ikke_holdout(dato)
+
+
+def kjor_kelly_sweep(prediksjoner, run_id=None, startkapital=config.STARTKAPITAL,
+                       min_innsats=config.MIN_INNSATS, maks_innsats=config.MAX_INNSATS,
+                       armer=KELLY_ARMER, opprettet=None, skriv_ut=True):
+    """
+    Re-staker ÉN cachet prediksjonsliste under hver arm i `armer`, og
+    returnerer en flat sweep-dict med fire arm-resultater — BT-07s
+    Kelly-fraksjon-sensitivitetssvar.
+
+    Sjekker at ingen rad er datert inn i den låste holdouten FØRST, før
+    noen staking og før noen metrikk regnes ut: en sweep som reiste
+    halvveis gjennom armløkken ville latt to armers holdout-avledede tall
+    ligge igjen i minnet og muligens i en kallers logg.
+
+    For hver (etikett, fraksjon) i `armer` sendes en FRISK, grunn kopi av
+    `prediksjoner` inn i simuler_bets — aldri den samme listen to ganger —
+    slik at en sortering inne i simuler_bets aldri kan omordne kallerens
+    egen liste mellom armene; radene selv leses kun, aldri skrives.
+    Flat-armens `kelly_fraksjon` sendes som None, ikke som noe tall: den
+    flate grenen kortslutter FØR Kelly-aritmetikken, så None når aldri en
+    utregning, og skulle en fremtidig refaktorering fjerne den
+    kortslutningen ville løpet feile høylytt med en TypeError i stedet for
+    stille å stake på halvt Kelly.
+
+    Hver arm bygges med nøkler i denne rekkefølgen: etikett,
+    kelly_fraksjon, flat_innsats, metrikker, tellere. `metrikker` kommer
+    fra ÉN delt bootstrap-seed og ett delt antall re-samples for alle fire
+    armer, slik at de fire konfidensintervallene er sammenlignbare seg
+    imellom. `tellere` er den armens egen resultat_sim-dict kopiert
+    uendret, som er det som gjør flat-mot-Kelly-bet-antall-forskjellen
+    forklarbar rett fra filen via kandidater_uten_kelly_edge.
+
+    `basis_arm` navngir armen hvis kelly_fraksjon er lik den levende
+    stake-regelen (config-modulens egen konstant), slik at en leser vet
+    hvilken arm som skal reprodusere den samme kjøringens manifest-tall
+    uten å måtte kjenne selve tallverdien.
+
+    D-05-02s ex-innbrenning-metrikksett gjentas BEVISST IKKE per arm her —
+    innbrennings-sensitiviteten er allerede besvart én gang av manifestet,
+    over basis-armen; denne filens spørsmål er staking-sensitivitet, og
+    åtte metrikksett uten noen erklært hovedtall ville visket ut den ene
+    sammenligningen denne filen finnes for å vise.
+    """
+    _sikre_prediksjoner_utenfor_holdout(prediksjoner)
+
+    flat_belop = flat_innsats_belop(startkapital)
+
+    arm_dicter = []
+    basis_arm = None
+
+    for etikett, fraksjon in armer:
+        flat_innsats = flat_belop if fraksjon is None else None
+        ledger, tellere = simuler_bets(
+            list(prediksjoner), startkapital=startkapital, kelly_fraksjon=fraksjon,
+            min_innsats=min_innsats, maks_innsats=maks_innsats,
+            flat_innsats=flat_innsats, skriv_ut=False,
+        )
+        # NB: kan IKKE skrives som oppsummer_ledger(*hent_metrikkserier(ledger),
+        # startkapital, ...) — hent_metrikkserier returnerer clv_verdier som sitt
+        # FJERDE element, mens oppsummer_ledger forventer startkapital som sin
+        # FJERDE POSISJONELLE parameter (clv_verdier er et senere nøkkelord-
+        # argument). En blind stjerne-utpakking ville sendt clv-listen inn i
+        # startkapital-plassen og startkapital-tallet inn i clv-plassen — samme
+        # eksplisitte utpakking-så-nøkkelord-mønster bygg_manifest allerede bruker.
+        profitter, innsatser, vant_flagg, clv_verdier = hent_metrikkserier(ledger)
+        metrikker = oppsummer_ledger(
+            profitter, innsatser, vant_flagg, startkapital,
+            clv_verdier=clv_verdier,
+            n_resamples=BOOTSTRAP_N_RESAMPLES, seed=BOOTSTRAP_SEED,
+        )
+        arm_dicter.append({
+            "etikett": etikett,
+            "kelly_fraksjon": fraksjon,
+            "flat_innsats": flat_innsats,
+            "metrikker": metrikker,
+            "tellere": copy.deepcopy(tellere),
+        })
+        if fraksjon == config.KELLY_FRAKSJON:
+            basis_arm = etikett
+
+    if opprettet is None:
+        opprettet = datetime.now().isoformat()
+
+    kamp_datoer = [p["kamp_dato"] for p in prediksjoner]
+    kilde = {
+        "antall_prediksjoner": len(prediksjoner),
+        "fra_dato": min(kamp_datoer) if kamp_datoer else None,
+        "til_dato": max(kamp_datoer) if kamp_datoer else None,
+    }
+    staking = {
+        "startkapital": startkapital,
+        "min_innsats": min_innsats,
+        "maks_innsats": maks_innsats,
+        "flat_innsats_andel": FLAT_INNSATS_ANDEL,
+        "flat_innsats": flat_belop,
+    }
+    bootstrap = {
+        "seed": BOOTSTRAP_SEED,
+        "n_resamples": BOOTSTRAP_N_RESAMPLES,
+    }
+
+    sweep = {
+        "run_id": run_id,
+        "opprettet": opprettet,
+        "type": "kelly-sweep",
+        "basis_arm": basis_arm,
+        "kilde": kilde,
+        "staking": staking,
+        "bootstrap": bootstrap,
+        "armer": arm_dicter,
+    }
+
+    if skriv_ut:
+        print("=" * 60)
+        print("KELLY-SWEEP")
+        for arm in arm_dicter:
+            merke = " (basis)" if arm["etikett"] == basis_arm else ""
+            if arm["kelly_fraksjon"] is None:
+                stake_tekst = f"flat={arm['flat_innsats']}"
+            else:
+                stake_tekst = f"fraksjon={arm['kelly_fraksjon']}"
+            m = arm["metrikker"]
+            print(
+                f"{arm['etikett']}{merke}: {stake_tekst} bets={m['antall_bets']} "
+                f"roi={m['roi']:.1%} maks_drawdown={m['maks_drawdown_andel']:.1%}"
+            )
+        print("=" * 60)
+
+    return sweep
