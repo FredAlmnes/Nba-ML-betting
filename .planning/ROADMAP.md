@@ -184,7 +184,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2)*
 
 - [x] 05-04-PLAN.md — odds.py: beste-pris-per-utfall for bet_time og closing, delt med verdi_deteksjon.py
-- [ ] 05-05-PLAN.md — spillerlogg.py + nba_spillerlogg_raw.csv: spillerkamplogger 2022-23..2024-25 via gratis nba_api
+- [x] 05-05-PLAN.md — spillerlogg.py + nba_spillerlogg_raw.csv: spillerkamplogger 2022-23..2024-25 via gratis nba_api
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -226,4 +226,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 9/9 | Complete   | 2026-08-24 |
-| 5. Walk-Forward Backtest Engine | 4/13 | In Progress|  |
+| 5. Walk-Forward Backtest Engine | 5/13 | In Progress|  |

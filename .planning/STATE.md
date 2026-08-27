@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-08-27T10:33:25.390Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-08-27T10:39:37.513Z"
 last_activity: 2026-08-27
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 35
-  completed_plans: 26
-  percent: 74
+  completed_plans: 27
+  percent: 77
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
-Plan: 5 of 13
+Plan: 6 of 13
 Status: Ready to execute
 Last activity: 2026-08-27
 
-Progress: [███████░░░] 74%
+Progress: [████████░░] 77%
 
 ## Performance Metrics
 
@@ -79,6 +79,7 @@ Progress: [███████░░░] 74%
 | Phase 05 P02 | 9min | 2 tasks | 4 files |
 | Phase 05 P03 | 35min | 3 tasks | 2 files |
 | Phase 05 P04 | 20min | 3 tasks | 3 files |
+| Phase 05 P05 | 22min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -138,6 +139,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 04: velg_beste_pris_per_utfall passes pris through unchanged (no float() coercion), preserving whatever value type the live Odds API payload or archive row already carries
 - [Phase 05]: Plan 04: _hent_beste_arkivpris pre-aggregates via SQL MAX(odds) GROUP BY utfall_navn before reducing through velg_beste_pris_per_utfall in Python -- provably equivalent, keeps the side-mapping/winner rule in exactly one place
 - [Phase 05]: Plan 04: no public snapshot_type parameter anywhere -- hent_bet_time_pris and hent_closing_pris each bind their own literal, making decision code structurally unable to reach a closing price by passing an argument (BT-02)
+- [Phase 05]: Plan 05: test fixture bug (float64->object dtype assignment) fixed in test_normaliser_null_minutter_blir_null_float, no change to spillerlogg.py's own MIN coercion logic
+- [Phase 05]: Plan 05: real 3-season nba_api fetch landed nba_spillerlogg_raw.csv on first attempt (78,602 rows, 2022-10-18 to 2025-04-13, 771 distinct players) -- no retry needed, closing Pitfall 1's data gap for plan 05-06's injury filter
 
 ### Pending Todos
 
@@ -159,6 +162,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T10:33:25.382Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-08-27T10:39:37.505Z
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None
