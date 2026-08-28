@@ -2,34 +2,96 @@
 phase: "5"
 slug: "walk-forward-backtest-engine"
 type: "frosne-beslutninger"
-run_id: "20260828-092713-6fd9654f"
-kjoringskatalog: "backtests/20260828-092713-6fd9654f"
-manifest_fil: "backtests/20260828-092713-6fd9654f/manifest.json"
-ledger_fil: "backtests/20260828-092713-6fd9654f/ledger.csv"
-sweep_fil: "backtests/20260828-092713-6fd9654f/kelly_sweep.json"
-git_head: "a44b40804d9cb1294509183ddea24195b5e78db7"
-frosset: false
-frosset_dato: null
-godkjent_av: null
+run_id: "20260828-095233-3cc4a836"
+kjoringskatalog: "backtests/20260828-095233-3cc4a836"
+manifest_fil: "backtests/20260828-095233-3cc4a836/manifest.json"
+ledger_fil: "backtests/20260828-095233-3cc4a836/ledger.csv"
+sweep_fil: "backtests/20260828-095233-3cc4a836/kelly_sweep.json"
+git_head: "33bbae133de71c47a95170a3a2f8a2e97b30d8dc"
+frosset: true
+frosset_dato: 2026-08-28
+godkjent_av: "Utvikleren, via to eksplisitte AskUserQuestion-runder i økten: (1) 'Freeze tight threshold (0.20/2.50) + flat staking (Recommended)' etter kalibreringsfiksen, (2) tidligere 'Fix calibration methodology first (Recommended)' da metningsfunnet ble presentert. Direkte utvikler-svar, ikke agent-relayed."
 created: 2026-08-28
 ---
 
-## Kjøringen
+## Sammendrag av hele frysings-prosessen
 
-Full invokasjon (kjørt fra repo-roten, med `venv` aktiv):
+Denne fasen gikk gjennom flere runder, ikke én enkelt kjøring. Rekkefølgen,
+i sin helhet, fordi den er selve begrunnelsen for hvilken konfigurasjon som
+til slutt ble frosset:
+
+1. **Kjøring 1** (`20260828-092713-6fd9654f`): full trening/kalibrering-slice
+   med live-konfigurasjonen (`min_value_terskel=0.05`, halv Kelly). 458 bets,
+   ROI 1.7 % (KI −10.1 % til 12.7 %) — statistisk ikke skilt fra null.
+2. Utvikleren ba om et forsøk med strammere terskel før frysing.
+3. **Kjøring 2** (`min-value-terskel=0.20`, `maks-odds=2.50`, halv Kelly):
+   kun 18 bets, ROI −38.6 %. For lite utvalg til å bety noe alene.
+4. Samme terskel med **flat stake** (én arm i `--sweep`): 60 bets, ROI 3.9 %,
+   CLV +1.2 % — det mest lovende funnet så langt, men uten egen
+   ledger (flat fantes da kun som sweep-arm, ikke egen kjøremodus).
+5. Utvikleren ba om at flat-staking skulle gjøres til en egen kjørbar modus
+   (for at 05-13 faktisk skal kunne gjenskape den frosne konfigurasjonen).
+   `--flat`-flagget ble lagt til `08_kjor_backtest.py` (commit `404621b`).
+6. **Et alvorlig datakvalitetsfunn** dukket opp ved inspeksjon av
+   ledger.csv fra kjøring 4: 23 av 60 bets (38 %) hadde `modell_prob`
+   nøyaktig `1.0` — umulig ekte modellsikkerhet. Rotårsak: `KALIBRER_ANDEL=0.15`
+   ga kalibreringssett så små som ~15 kamper ved `MIN_TRENINGSKAMPER=100`,
+   godt under selv Fase 3s ENGANGS-kalibreringssett på 172 kamper (som
+   Fase 3 selv allerede flagget som under sklearns ~1000-anbefaling).
+   Isotonic regression metter til 0/1 med så få kalibreringspunkter.
+7. Utvikleren ba om at kalibreringsmetodikken ble fikset før videre arbeid.
+   Et absolutt gulv (`MIN_KALIBRERINGSKAMPER=50`,
+   `MIN_TRENING_ETTER_KALIBRERING=50`) ble lagt til `model.py::del_for_trening`
+   (commit `33bbae1`), verifisert mot 15 nye/endrede tester.
+8. **Kjøring 5** (samme live-config som kjøring 1, ETTER fiksen): metning
+   falt fra ~38 % til ~3.5 % i denne slicen; ROI-bildet endret seg lite
+   (−1.3 %, fortsatt ikke skilt fra null) — live-konfigurasjonen var
+   aldri det lovende funnet.
+9. **Kjøring 6 — DEN FROSNE KJØRINGEN** (`20260828-095233-3cc4a836`): samme
+   stramme terskel (0.20/2.50) + flat stake, ETTER kalibreringsfiksen.
+   52 bets, ROI **15.0 %** (KI −11.9 % til 42.9 %), CLV **+2.08 %**,
+   maks drawdown 7.8 %. Metning falt til 16/52 (30.8 %) — fortsatt
+   til stede men lavere. Et manuelt sjekk mot kun de 36 "rene" (ikke-mettede)
+   bets-ene i denne kjøringen viste ROI 10.2 %, CLV 2.32 % — signalet
+   overlever å fjerne de gjenværende mettede bets-ene.
+10. Utvikleren valgte, direkte, å fryse på kjøring 6s konfigurasjon.
+
+**Viktig ærlighet om utvalgsstørrelsen:** 52 bets (eller 36 "rene") er et
+lite utvalg. Konfidensintervallet [−11.9 %, 42.9 %] utelukker IKKE null ved
+95 % konfidens. Dette er det mest lovende funnet i hele utforskningen —
+det er ikke et statistisk bevist funn. Holdout-kjøringen (plan 05-13) er
+den ENESTE gjenværende testen som kan bekrefte eller avkrefte det.
+
+## Kalibreringsfiksen (D-05-05) — hvorfor den er en reell korreksjon, ikke tuning
+
+Dette er IKKE en terskel-justering på trening/kalibrering-skiven (som ville
+vært i tråd med REQUIREMENTS.md sin advarsel mot "in-sample threshold/parameter
+tuning without a locked holdout") — det er en korreksjon av en metodefeil i
+HVORDAN modellen kalibreres, oppdaget og fikset FØR frysing, på samme skive
+frysingen selv bruker. Fiksen endrer ikke noen strategi-parameter
+(`min_value_terskel`, `maks_odds`, Kelly-fraksjon) — den endrer kun hvor mange
+kamper som går til `IsotonicRegression.fit()` per retrening. Se
+`model.py`-commit `33bbae1` for full begrunnelse og `tests/test_model.py`
+for de 4 nye/endrede testene som låser oppførselen.
+
+## Kjøringen som ble frosset
+
+Full invokasjon (kjørt fra repo-roten, med `venv` aktiv, ETTER
+kalibreringsfiksen i commit `33bbae1`):
 
 ```bash
-./venv/bin/python3 08_kjor_backtest.py --fra 2022-10-24 --til 2024-09-30 --sweep
+./venv/bin/python3 08_kjor_backtest.py --min-value-terskel 0.20 --maks-odds 2.50 --flat --sweep --stille
 ```
 
-- **run_id:** `20260828-092713-6fd9654f`
-- **Kjøringskatalog:** `backtests/20260828-092713-6fd9654f/`
-- **git_head:** `a44b40804d9cb1294509183ddea24195b5e78db7`
+- **run_id:** `20260828-095233-3cc4a836`
+- **Kjøringskatalog:** `backtests/20260828-095233-3cc4a836/`
+- **git_head (denne kjøringen ble produsert etter):** `33bbae133de71c47a95170a3a2f8a2e97b30d8dc`
 - **manifest["type"]:** `"tuning"`
-- **opprettet:** `2026-08-28T09:27:13.874208`
-- **Varighet:** ca. 44 sekunder (første XGBoost-advarsel logget `09:26:37`, manifestet fikk `opprettet: 09:27:13`; hele CLI-invokasjonen, inkludert Python-oppstart og pytest-preflighten som gikk rett før, ble fullført godt under ett minutt — i tråd med `<verified_data_facts>`s estimat om at 13 retreninger koster sekunder og hele prediksjonspasset 10-15 s)
+- **opprettet:** `2026-08-28T09:52:33.457226`
 
-`manifest["periode"]["til_dato"]` er `"2024-04-14"` (siste faktisk behandlede kampdato innenfor vinduet), som er strengt mindre enn `config.HOLDOUT_START_DATO = "2024-10-01"`. Kjøringen har dermed aldri rørt den låste 2024-25-holdouten.
+`manifest["periode"]["til_dato"]` er `"2024-04-14"`, strengt mindre enn
+`config.HOLDOUT_START_DATO = "2024-10-01"`. Kjøringen har aldri rørt den
+låste 2024-25-holdouten.
 
 ## Konfigurasjonen som produserte tallene
 
@@ -37,11 +99,11 @@ Full invokasjon (kjørt fra repo-roten, med `venv` aktiv):
 
 | Nøkkel | Verdi i kjøringen | Live-verdi i config.py |
 |---|---|---|
-| min_value_terskel | 0.05 | 0.05 |
+| min_value_terskel | 0.20 | 0.05 |
 | min_odds | 1.5 | 1.50 |
-| maks_odds | 4.0 | 4.00 |
-| kelly_fraksjon | 0.5 | 0.5 |
-| flat_innsats | null | — |
+| maks_odds | 2.5 | 4.00 |
+| kelly_fraksjon | null (flat) | 0.5 |
+| flat_innsats | 20.0 | — |
 | startkapital | 1000.0 | 1000.0 |
 | min_innsats | 20.0 | 20.0 |
 | maks_innsats | 150.0 | 150.0 |
@@ -53,52 +115,60 @@ Full invokasjon (kjørt fra repo-roten, med `venv` aktiv):
 | bootstrap_seed | 42 | — |
 | bootstrap_n_resamples | 1000 | — |
 
-## Trakten
+**To verdier avviker fra live-konfigurasjonen** (`min_value_terskel`,
+`maks_odds`) pluss staking-regelen (flat i stedet for halv Kelly) — dette
+er nettopp resultatet av frysings-prosessen: live-konfigurasjonen viste
+intet reelt signal selv etter kalibreringsfiksen (se kjøring 5/8 over),
+mens denne strammere konfigurasjonen gjorde det.
 
-Fra kamper til plasserte bets, med absolutt antall og andel av forrige steg:
+## Trakten
 
 | Steg | Antall | Andel av forrige steg |
 |---|---|---|
-| kamper_totalt | 2 302 | 100,0 % (utgangspunkt) |
-| kandidater_flagget | 1 205 | 52,3 % av kamper_totalt |
-| minus kandidater_blokkert_av_skadefilter (747) | 458 | 38,0 % av kandidater_flagget |
-| minus kandidater_uten_kelly_edge (0) | 458 | 100,0 % |
-| minus bets_hoppet_over_duplikat (0) | 458 | 100,0 % |
-| minus bets_uten_utfall (0) | 458 | 100,0 % |
-| metrikker["antall_bets"] | 458 | — |
-
-`kandidater_flagget` (1 205) ligger **langt over** det ~185-345-kandidat-båndet `<verified_data_facts>` anslo for denne skiven (avledet fra en antatt 8-15 % flagg-rate over 2 302 kamper). Ingen tolkning av hva dette betyr for strategien gis her.
+| kamper_totalt | 2 302 | 100,0 % |
+| kandidater_flagget | 127 | 5,5 % av kamper_totalt |
+| minus kandidater_blokkert_av_skadefilter (75) | 52 | 40,9 % av kandidater_flagget |
+| minus kandidater_uten_kelly_edge (0) | 52 | 100,0 % (flat stake har ingen Kelly-edge-terskel) |
+| minus bets_hoppet_over_duplikat (0) | 52 | 100,0 % |
+| minus bets_uten_utfall (0) | 52 | 100,0 % |
+| metrikker["antall_bets"] | 52 | — |
 
 ## Hovedtall
 
-`manifest["headline"]` peker på `"metrikker"` (full periode). `innbrenning_maaneder` er `3`; `innbrenning_fra_dato` er `"2023-02-02"` (datoen `metrikker_uten_innbrenning` regnes fra, etter at de tre første distinkte behandlede kalendermånedene er droppet).
+`manifest["headline"]` peker på `"metrikker"` (full periode).
+`innbrenning_maaneder`: 3. `innbrenning_fra_dato`: `"2023-03-18"`.
 
 | Nøkkel | metrikker (full periode) | metrikker_uten_innbrenning |
 |---|---|---|
-| antall_bets | 458 | 315 |
-| antall_vunnet | 191 | 125 |
-| roi | 1.7% | -2.1% |
-| roi_ci_nedre | -10.1% | -15.8% |
-| roi_ci_oevre | 12.7% | 12.2% |
-| vinnrate | 41.7% | 39.7% |
-| vinnrate_ci_nedre | 37.3% | 34.4% |
-| vinnrate_ci_oevre | 46.3% | 45.2% |
-| maks_drawdown_kroner | 3027.0 | 3027.0 |
-| maks_drawdown_andel | 67.8% | 126.5% |
-| sum_innsats | 64654.3 | 45452.2 |
-| sum_profitt | 1110.9 | -960.9 |
-| clv_snitt | 0.0001002 | -0.0010591 |
-| antall_med_clv | 458 | 315 |
+| antall_bets | 52 | 21 |
+| antall_vunnet | 30 | 12 |
+| roi | 15.0% | 17.9% |
+| roi_ci_nedre | -11.9% | -24.1% |
+| roi_ci_oevre | 42.9% | 60.3% |
+| vinnrate | 57.7% | 57.1% |
+| vinnrate_ci_nedre | 44.2% | 36.5% |
+| vinnrate_ci_oevre | 70.1% | 75.5% |
+| maks_drawdown_kroner | 80.0 | 80.0 |
+| maks_drawdown_andel | 7.8% | 7.1% |
+| sum_innsats | 1040.0 | 420.0 |
+| sum_profitt | 156.2 | 75.2 |
+| clv_snitt | 2.075% | 1.745% |
+| antall_med_clv | 52 | 21 |
 | antall_uten_clv | 0 | 0 |
-| andel_slo_closing | 49.8% | 50.8% |
+| andel_slo_closing | 76.9% | 90.5% |
 | bootstrap_seed | 42 | 42 |
 | bootstrap_n_resamples | 1000 | 1000 |
 
-`datakvalitet["sluttsaldo"]`: **2110.9** kr, mot `konfig["startkapital"]`: **1000.0** kr.
+`sluttsaldo`: **1156.2** kr, mot `startkapital`: **1000.0** kr.
+
+**Manuell sjekk mot residual-metning (ikke i manifestet, beregnet separat
+fra ledger.csv med `metrics.py` sine egne funksjoner):** av de 52 bets-ene
+hadde 16 (30.8 %) fortsatt `modell_prob == 1.0` selv etter kalibreringsfiksen.
+De 36 gjenværende "rene" bets-ene ga ROI 10.2 % (KI −27.8 % til 43.6 %),
+vinnrate 52.8 %, drawdown 7.1 %, CLV 2.32 % — signalet svekkes noe men
+forsvinner ikke.
 
 ## Datakvalitet og hopp
-
-Alle fjorten `datakvalitet`-tellere, ingen oppsummert eller utelatt:
 
 | Teller | Verdi |
 |---|---|
@@ -106,66 +176,98 @@ Alle fjorten `datakvalitet`-tellere, ingen oppsummert eller utelatt:
 | kamper_hoppet_over_manglende_odds | 0 |
 | kamper_hoppet_over_ukjent_lag | 0 |
 | kamper_uten_closing_snapshot | 0 |
-| kandidater_flagget | 1 205 |
-| kandidater_blokkert_av_skadefilter | 747 |
-| skadesjekk_uten_datagrunnlag | 20 |
+| kandidater_flagget | 127 |
+| kandidater_blokkert_av_skadefilter | 75 |
+| skadesjekk_uten_datagrunnlag | 4 |
 | kandidater_uten_kelly_edge | 0 |
 | bets_hoppet_over_duplikat | 0 |
 | bets_uten_utfall | 0 |
 | datoer_stoppet_lav_bankroll | 0 |
 | bets_uten_clv | 0 |
 | retreninger | 13 |
-| sluttsaldo | 2110.9 |
+| sluttsaldo | 1156.2 |
 
-Varm-opp-hoppet (15 datoer / 111 kamper, alle i oktober/tidlig november 2022) er forventet — ikke et datahull. Det skyldes at `min_treningskamper=100` krever et treningsgrunnlag som ikke finnes før arkivets første kamper er spilt; se `05-07-SUMMARY.md`.
+Varm-opp-hoppet (15 datoer / samme som alle andre kjøringer denne fasen)
+er forventet, ikke et datahull — se `05-07-SUMMARY.md`.
+`skadesjekk_uten_datagrunnlag` (4) er lavere enn i den løse-terskel-kjøringen
+(20) fordi denne slicen har færre kandidater totalt å sjekke.
 
-Den tynnere eu-region-bookmaker-dekningen tidlig i 2022-23 (målt til 10-11 bookmakere/kamp tidlig, mot 17-19 senere i Fase 4, akseptert av utvikleren som en dokumentert avgrensning) gjelder også denne kjøringen, men er ikke separat målbar fra denne kjøringens egne tellere — den er en egenskap ved det arkiverte datagrunnlaget, ikke ved denne backtesten.
+## Kelly-sweep (kjørt ved siden av, samme kjøring)
 
-`kamper_uten_closing_snapshot` er `0` i denne kjøringen — det ene kjente gap-spillet (`2023-03-11` PHX mot SAC) traff altså ikke denne slicens faktisk behandlede kamper (eller ble ikke flagget som kandidat), og `bets_uten_clv` er også `0`, konsistent med det.
-
-`skadesjekk_uten_datagrunnlag` er `20` (vakuøse skadesjekk-passeringer, dvs. lag uten toppspillerdata på den datoen) — disse ble IKKE blokkert av skadefilteret (skadefilteret blokkerer bare når helsevurderingen faktisk mangler for et lag som har toppspillere å vurdere; se `05-06-SUMMARY.md`), så de påvirker ikke `kandidater_blokkert_av_skadefilter`-telleren direkte, men betyr at 20 kandidat-vurderinger manglet et fullstendig datagrunnlag for skadesjekken. `datoer_stoppet_lav_bankroll` er `0` — banken ble aldri for lav til å plassere et bet i denne kjøringen.
-
-## Kelly-sweep
-
-Én rad per arm, i `kelly_sweep.json`s låste rekkefølge. `basis_arm` er `"halv"`, markert under.
-
-| Arm | kelly_fraksjon | flat_innsats | antall_bets | ROI | ROI 95 % KI | maks drawdown | kandidater_uten_kelly_edge |
+| Arm | kelly_fraksjon | flat_innsats | antall_bets | ROI | ROI 95 % KI | maks drawdown | CLV |
 |---|---|---|---|---|---|---|---|
-| flat | null | 20.0 | 458 | 2.0% | -9.7% – 13.2% | 27.9% | 0 |
-| kvart | 0.25 | null | 458 | -1.2% | -13.7% – 11.6% | 82.9% | 0 |
-| **halv (basis_arm)** | 0.5 | null | 458 | 1.7% | -10.1% – 12.7% | 67.8% | 0 |
-| full | 1.0 | null | 458 | 1.8% | -10.0% – 12.7% | 68.3% | 0 |
+| **flat (hovedregelen som ble frosset)** | null | 20.0 | 52 | 15.0% | -11.9% – 42.9% | 7.8% | 2.075% |
+| kvart | 0.25 | null | 52 | 15.8% | -11.8% – 43.1% | 47.1% | 2.075% |
+| halv | 0.5 | null | 52 | 15.0% | -11.9% – 42.9% | 49.2% | 2.075% |
+| full | 1.0 | null | 52 | 15.0% | -11.9% – 42.9% | 49.2% | 2.075% |
 
-Alle fire armer plasserte de samme 458 bets i denne kjøringen — `kandidater_uten_kelly_edge` er `0` for hver eneste arm, så ingen kandidat i denne slicen hadde en ikke-positiv Kelly-edge som fikk Kelly-armene til å hoppe over noe flat-armen tok med. Dette er en egenskap ved dataene i akkurat denne slicen, ikke ved mekanismen (se `05-09-SUMMARY.md` for det generelle tilfellet, bevist syntetisk).
-
-`basis_arm`-radens (`"halv"`) `roi` (0.017182143883558525) og `antall_bets` (458) er **identiske** med `manifest["metrikker"]`s tilsvarende felt — verifisert ved direkte sammenligning av tallene, ikke bare stikkprøve. Sweepen og manifestet er altså enige om samme kjøring.
+Alle fire armer plasserte de samme 52 bets (`kandidater_uten_kelly_edge`
+er 0 for alle) — forskjellen mellom armene er kun stake-størrelse, ikke
+hvilke bets som ble tatt. ROI er nesten identisk på tvers av armer
+(CLV er identisk, siden CLV er stake-uavhengig), men **maks drawdown er
+dramatisk lavere for flat (7.8 %) enn for noen Kelly-fraksjon (47-49 %)** —
+dette er selve grunnen til at flat ble valgt over halv Kelly: samme
+forventede avkastning, langt lavere risiko på dette lille utvalget.
 
 ## Frosne beslutninger
 
 | ID | Parameter | Frosset verdi | Kilde | Slik overstyres den i 05-13 |
 |---|---|---|---|---|
+| F-05-01 | min_value_terskel | 0.20 | manifest.json konfig | `--min-value-terskel 0.20` |
+| F-05-02 | min_odds | 1.5 | manifest.json konfig | `--min-odds 1.5` |
+| F-05-03 | maks_odds | 2.5 | manifest.json konfig | `--maks-odds 2.5` |
+| F-05-04 | staking-regel | flat (ikke Kelly) | manifest.json konfig + kjøring 4/6s sammenligning | `--flat` |
+| F-05-05 | flat_innsats | 20.0 kr (2% av startkapital) | manifest.json konfig (backtest.flat_innsats_belop) | Beregnes automatisk fra `--startkapital` når `--flat` er satt, ingen egen flagg |
+| F-05-06 | startkapital | 1000.0 | manifest.json konfig | `--startkapital 1000.0` (standardverdi, kan utelates) |
+| F-05-07 | min_innsats | 20.0 | manifest.json konfig | — (ingen flagg; standardverdi fra config.py) |
+| F-05-08 | maks_innsats | 150.0 | manifest.json konfig | — (ingen flagg; standardverdi fra config.py) |
+| F-05-09 | min_treningskamper | 100 | manifest.json konfig | — (ingen flagg; standardverdi) |
+| F-05-10 | kalibrer_andel | 0.15 (med D-05-05s gulv på 50 kamper) | manifest.json konfig + model.py commit 33bbae1 | — (ingen flagg; kildekode-endring, ikke en per-kjøring-parameter) |
+| F-05-11 | retrenings_kadens | "maanedlig" | manifest.json konfig | — (ingen flagg) |
+| F-05-12 | holdout_start_dato | "2024-10-01" | manifest.json konfig + config.py | — (ingen flagg; config.py-konstant) |
+| F-05-13 | skadefilter_aktiv | true | manifest.json konfig | — (ingen flagg; PÅ er standard, `--uten-skadefilter` ville slått den av) |
+| F-05-14 | bootstrap_seed | 42 | manifest.json konfig | — (ingen flagg; metrics.py-konstant) |
+| F-05-15 | bootstrap_n_resamples | 1000 | manifest.json konfig | — (ingen flagg; metrics.py-konstant) |
 
-Ikke frosset ennå — fylles av oppgave 2 etter utviklerens beslutning.
+**Ingen `config.py`-verdi ble endret.** Den frosne konfigurasjonen er
+uttrykt som CLI-argumenter for plan 05-13, ikke som en endring av den
+kjørende live-boten. Hvorvidt live-konfigurasjonen (`04_value_detector.py`,
+`06_bot.py`) skal oppdateres til å matche, er en SEPARAT, senere beslutning
+som avhenger av hva holdout-kjøringen (plan 05-13) faktisk viser.
 
 ## Hva 05-13 skal kjøre
 
-Ikke frosset ennå — fylles av oppgave 2 etter utviklerens beslutning.
+Den EKSAKTE kommandolinjen, ordrett, som plan 05-13 skal kjøre for å bruke
+opp den låste 2024-25-holdouten:
 
-## Rå terminalutskrift
+```bash
+./venv/bin/python3 08_kjor_backtest.py --holdout --bekreft-holdout --min-value-terskel 0.20 --maks-odds 2.50 --flat
+```
+
+Merk: **INGEN `--sweep`** (kan ikke kombineres med `--holdout` — sweepen
+finnes for å VELGE en konfigurasjon, ikke for å teste flere på holdouten).
+`--fra`/`--til` utelates bevisst (holdout-veien begrenser selv sitt eget
+datoområde). `--startkapital`, `--min-innsats`, `--maks-innsats`,
+`--min-treningskamper` utelates fordi de allerede står på sine
+frosne standardverdier (F-05-06/07/08/09) — 05-13s pre-flight skal
+verifisere dette eksplisitt før kjøring, ikke anta det.
+
+## Rå terminalutskrift (den frosne kjøringen)
 
 ```
 ============================================================
 WALK-FORWARD BACKTEST
 ============================================================
 Modus:                tuning
-Fra:                  2022-10-24
-Til:                  2024-09-30
+Fra:                  (tidligste dato i nba_features.csv)
+Til:                  2024-09-30 (standard: dagen før holdout)
 Sweep:                True
 Uten skadefilter:     False
-Min value-terskel:    0.05
+Min value-terskel:    0.2
 Min odds:             1.5
-Maks odds:            4.0
-Kelly-fraksjon:       0.5
+Maks odds:            2.5
+Kelly-fraksjon:       (flat stake, se under)
+Flat innsats:         20.0 kr
 Startkapital:         1000.0
 Min treningskamper:   100
 Features-fil:         nba_features.csv
@@ -173,70 +275,35 @@ Arkiv:                odds_arkiv.db
 Katalog:              backtests
 ============================================================
 ============================================================
-WALK-FORWARD PREDIKSJONSPASS
-fra_dato: 2022-10-24
-til_dato: 2024-04-14
-datoer_totalt: 318
-datoer_behandlet: 303
-datoer_hoppet_over_for_lite_treningsgrunnlag: 15
-kamper_totalt: 2302
-kamper_hoppet_over_manglende_odds: 0
-kamper_hoppet_over_ukjent_lag: 0
-kamper_uten_closing_snapshot: 0
-kandidater_flagget: 1205
-kandidater_blokkert_av_skadefilter: 747
-skadesjekk_uten_datagrunnlag: 20
-retreninger: 13
-prediksjoner: 458
-min_treningskamper: 100
-kalibrer_andel: 0.15
-min_value_terskel: 0.05
-min_odds: 1.5
-maks_odds: 4.0
-skadefilter_aktiv: True
-============================================================
-============================================================
-SIMULERINGSPASS
-startkapital: 1000.0
-kelly_fraksjon: 0.5
-flat_innsats: None
-min_innsats: 20.0
-maks_innsats: 150.0
-kandidater_totalt: 458
-bets_plassert: 458
-kandidater_uten_kelly_edge: 0
-bets_hoppet_over_duplikat: 0
-bets_uten_utfall: 0
-datoer_stoppet_lav_bankroll: 0
-bets_uten_clv: 0
-sluttsaldo: 2110.9000314331065
-============================================================
-============================================================
-KELLY-SWEEP
-flat: flat=20.0 bets=458 roi=2.0% maks_drawdown=27.9%
-kvart: fraksjon=0.25 bets=458 roi=-1.2% maks_drawdown=82.9%
-halv (basis): fraksjon=0.5 bets=458 roi=1.7% maks_drawdown=67.8%
-full: fraksjon=1.0 bets=458 roi=1.8% maks_drawdown=68.3%
-============================================================
-============================================================
 BACKTEST-OPPSUMMERING
-run_id:               20260828-092713-6fd9654f
+run_id:               20260828-095233-3cc4a836
 type:                 tuning
-katalog:              backtests/20260828-092713-6fd9654f
+katalog:              backtests/20260828-095233-3cc4a836
 fra_dato:             2022-10-24
 til_dato:             2024-04-14
 datoer_behandlet:     303
 kamper_totalt:        2302
 kamper_hoppet_over_manglende_odds:  0
-kandidater_flagget:                 1205
-kandidater_blokkert_av_skadefilter:  747
+kandidater_flagget:                 127
+kandidater_blokkert_av_skadefilter:  75
 retreninger:                         13
-antall_bets:          458
-roi:                  1.7% (KI -10.1% – 12.7%)
-vinnrate:             41.7%
-maks_drawdown:        67.8%
-clv_snitt:            0.00010023993953366159
+antall_bets:          52
+roi:                  15.0% (KI -11.9% – 42.9%)
+vinnrate:             57.7%
+maks_drawdown:        7.8%
+clv_snitt:            0.020750397633784536
 ============================================================
-manifest.json skrevet til: backtests/20260828-092713-6fd9654f/manifest.json
-kelly_sweep.json skrevet til: backtests/20260828-092713-6fd9654f/kelly_sweep.json
+manifest.json skrevet til: backtests/20260828-095233-3cc4a836/manifest.json
+kelly_sweep.json skrevet til: backtests/20260828-095233-3cc4a836/kelly_sweep.json
 ```
+
+## Tidligere kjøringer i denne prosessen (arkivert for sporbarhet)
+
+Alle skrevet til `backtests/` (gitignored) i løpet av utforskningen, ingen
+av dem er `type: "holdout"`:
+
+- `20260828-092713-6fd9654f` — kjøring 1 (live-config, FØR kalibreringsfiksen)
+- `20260828-093206-9fd2dcbd` — kjøring 2/3 (0.20/2.50, halv Kelly, FØR fiksen)
+- `20260828-093815-3cc4a836` — kjøring 4 (0.20/2.50, flat, FØR fiksen, første `--flat`-kjøring)
+- `20260828-095206-6fd9654f` — kjøring 5/8 (live-config, ETTER fiksen)
+- `20260828-095233-3cc4a836` — **kjøring 6, DEN FROSNE KJØRINGEN** (0.20/2.50, flat, ETTER fiksen)

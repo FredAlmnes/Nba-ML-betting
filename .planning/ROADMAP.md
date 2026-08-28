@@ -209,7 +209,7 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8)*
 
-- [ ] 05-12-PLAN.md — Fryse-kjøring: full tuning-slice med sweep, blokkerende godkjenning, 05-FROSNE-BESLUTNINGER.md
+- [x] 05-12-PLAN.md — Fryse-kjøring: full tuning-slice med sweep, blokkerende godkjenning, 05-FROSNE-BESLUTNINGER.md
 
 **Wave 10** *(blocked on Wave 9)*
 
@@ -226,4 +226,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 9/9 | Complete   | 2026-08-24 |
-| 5. Walk-Forward Backtest Engine | 11/13 | In Progress|  |
+| 5. Walk-Forward Backtest Engine | 12/13 | In Progress|  |

@@ -106,11 +106,11 @@ Run from the repo root with the venv active (`source venv/bin/activate`), 2026-0
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 20s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 20s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-08-28 — see `.planning/phases/05-walk-forward-backtest-engine/05-FROSNE-BESLUTNINGER.md` for the full decision trail (initial run → calibration-degeneracy finding → `D-05-05` fix → re-exploration → freeze on tight threshold 0.20/2.50 + flat staking). Frozen configuration approved directly by the developer via interactive decision points, not agent-relayed.

@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 05-10-PLAN.md
-last_updated: "2026-08-28T07:23:11.860Z"
+last_updated: "2026-08-28T07:56:37.150Z"
 last_activity: 2026-08-28
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 35
-  completed_plans: 33
+  completed_plans: 34
   percent: 80
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 ## Current Position
 
 Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
-Plan: 12 of 13
+Plan: 13 of 13
 Status: Ready to execute
 Last activity: 2026-08-28
 
@@ -156,6 +156,9 @@ Recent decisions affecting current work:
 - [Phase ?]: 05-09: Fixed a signature mismatch (Rule 1) in the plan's suggested oppsummer_ledger(*hent_metrikkserier(...)) call — startkapital and clv_verdier landed in swapped positions; unpacked explicitly and passed clv_verdier as a keyword, matching bygg_manifest's existing pattern
 - [Phase 05]: Plan 10: default --til resolves to dag_for_holdout() (day before config.HOLDOUT_START_DATO) only when --holdout is absent and --til was omitted; an explicit --til is never overridden and the --holdout path is never clamped — Prevents the bare python 08_kjor_backtest.py invocation from tripping HoldoutLaastFeil while never widening the holdout's own self-narrowing range
 - [Phase 05]: Plan 10: four holdout-adjacent CLI flag combinations refused via parser.error (exit 2) before any file is opened or directory created: confirmation without --holdout, --holdout without confirmation, --holdout+--sweep, --holdout+--fra/--til — kjor_holdout() is the only function whose source may contain holdout=True, pinned by an inspect.getsource source-exclusion test (T-05-10-01/02)
+- [Phase 05]: Plan 12: discovered a real isotonic-calibration bug during the freeze checkpoint — KALIBRER_ANDEL=0.15 applied to small walk-forward windows produced calibration sets as small as ~15 games, saturating modell_prob to exactly 1.0 for up to 38% of bets in some samples. Fixed with an absolute 50-game floor (D-05-05, model.py MIN_KALIBRERINGSKAMPER/MIN_TRENING_ETTER_KALIBRERING, commit 33bbae1) — saturation dropped to ~3.5% in the live-config slice. This is a permanent fix affecting every future walk-forward run, not scoped to this one freeze.
+- [Phase 05]: Plan 12: added --flat as a first-class 08_kjor_backtest.py run mode (commit 404621b) so a flat-staking freeze decision is actually reproducible by plan 05-13 — flat previously existed only as a --sweep arm (original D-05-03 design), which would have made the chosen frozen config unexecutable for the holdout run.
+- [Phase 05]: Plan 12: froze min_value_terskel=0.20, maks_odds=2.50, flat staking (20kr/bet) — a real deviation from the live bot's config (0.05, half-Kelly) — after the live config showed no statistically meaningful edge even post-calibration-fix (461 bets, ROI -1.3%, CI straddles zero), while the tighter config showed ROI +15.0%/CLV +2.08% (52 bets) that survived excluding residual-saturation bets (ROI +10.2%/CLV +2.32% on 36 "clean" bets). Sample is still small — CI does not exclude zero. Full decision trail in 05-FROSNE-BESLUTNINGER.md. No config.py value was changed; this is a CLI-argument freeze for plan 05-13 only.
 
 ### Pending Todos
 
