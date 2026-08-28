@@ -207,6 +207,18 @@ def bygg_parser():
         help=f"Kelly-fraksjon for innsatsstørrelse (standard: config.KELLY_FRAKSJON={config.KELLY_FRAKSJON}).",
     )
     parser.add_argument(
+        "--flat",
+        action="store_true",
+        help=(
+            "Bruker D-05-03s flate stake (backtest.flat_innsats_belop, 2% av "
+            "--startkapital) i stedet for Kelly-staking som løpets HOVEDregel "
+            "— ikke bare som én sweep-arm. Lagt til for plan 05-12s "
+            "frysing, etter at et sweep-funn viste en flat-stake-konfigurasjon "
+            "verdt å fryse på. Kan ikke kombineres med en eksplisitt endret "
+            "--kelly-fraksjon (tvetydig hvilken som skal gjelde)."
+        ),
+    )
+    parser.add_argument(
         "--startkapital",
         type=positiv_flyt,
         default=config.STARTKAPITAL,
@@ -245,10 +257,6 @@ def bygg_parser():
             "BACKTEST-OPPSUMMERING skrives alltid."
         ),
     )
-    # Bevisst INGEN --flat-innsats: den flate staken er en sweep-ARM
-    # (D-05-03), ikke en egen kjøremodus — en "flat kjøring" utenfor
-    # sweepen ville gitt en hovedtall-ROI uten noen Kelly-basislinje ved
-    # siden av å sammenligne mot.
     # Bevisst INGEN --innbrenning-maaneder: innbrennings-vinduet er en
     # fase-nivå-rapporteringspolicy (D-05-02) som manifest.json allerede
     # rapporterer begge veier (full periode + ex-innbrenning), ikke en
@@ -269,7 +277,18 @@ def bygg_kjoreargumenter(args):
     faktisk skiller de to veiene fra hverandre, og å holde dem UTENFOR
     denne dict-en er det som gjør forskjellen grep-bar — hver av dem
     settes eksplisitt på kun ett kallsted (kjor_tuning/kjor_holdout).
+
+    Når `--flat` er satt sendes `kelly_fraksjon=None` og `flat_innsats`
+    beregnes fra `backtest.flat_innsats_belop(startkapital)` — nøyaktig
+    samme gren `simuler_bets` allerede bruker for sweepens flate arm
+    (D-05-03), nå som løpets hovedregel i stedet for én sweep-arm blant fire.
     """
+    if args.flat:
+        kelly_fraksjon = None
+        flat_innsats = backtest.flat_innsats_belop(args.startkapital)
+    else:
+        kelly_fraksjon = args.kelly_fraksjon
+        flat_innsats = None
     return dict(
         katalog=args.katalog,
         min_value_terskel=args.min_value_terskel,
@@ -278,7 +297,8 @@ def bygg_kjoreargumenter(args):
         min_treningskamper=args.min_treningskamper,
         bruk_skadefilter=not args.uten_skadefilter,
         startkapital=args.startkapital,
-        kelly_fraksjon=args.kelly_fraksjon,
+        kelly_fraksjon=kelly_fraksjon,
+        flat_innsats=flat_innsats,
         skriv_ut=not args.stille,
     )
 
@@ -467,17 +487,29 @@ def main():
             "område her — holdouten nås kun via --holdout."
         )
 
-    # 7. Ved fraksjon 0 blir hver innsats 0.0 (strategy.beregn_innsats),
-    #    som gir et løp som tilsynelatende aldri taper.
-    if not (0 < args.kelly_fraksjon <= 1.0):
+    # 7. --flat og en eksplisitt endret --kelly-fraksjon samtidig er
+    #    tvetydig — hvilken skal faktisk gjelde som løpets hovedregel?
+    if args.flat and args.kelly_fraksjon != config.KELLY_FRAKSJON:
+        parser.error(
+            "--flat kan ikke kombineres med en eksplisitt --kelly-fraksjon "
+            f"({args.kelly_fraksjon}) — --flat erstatter Kelly-staking helt "
+            "som løpets hovedregel, så det er tvetydig hvilken som skal gjelde."
+        )
+
+    # 8. Ved fraksjon 0 blir hver innsats 0.0 (strategy.beregn_innsats),
+    #    som gir et løp som tilsynelatende aldri taper. Denne sjekken
+    #    gjelder ikke når --flat er satt: da er --kelly-fraksjon irrelevant
+    #    (kelly_fraksjon sendes som None til simuler_bets, ikke som et tall).
+    if not args.flat and not (0 < args.kelly_fraksjon <= 1.0):
         parser.error(
             f"--kelly-fraksjon {args.kelly_fraksjon} må være strengt større "
             "enn 0 og høyst 1.0. Ved fraksjon 0 blir hver innsats 0.0 "
             "(strategy.beregn_innsats), som gir et løp som aldri kan tape — "
-            "bruk --sweep for en ekte flat-stake-sammenligning i stedet."
+            "bruk --flat for en ekte flat-stake-hovedkjøring, eller --sweep "
+            "for en flat-stake-sammenligning ved siden av Kelly-armene."
         )
 
-    # 8. Et omvendt odds-bånd flagger ingenting og leser som "modellen fant
+    # 9. Et omvendt odds-bånd flagger ingenting og leser som "modellen fant
     #    ingen value".
     if not (args.min_odds < args.maks_odds):
         parser.error(
@@ -498,7 +530,11 @@ def main():
     print(f"Min value-terskel:    {args.min_value_terskel}")
     print(f"Min odds:             {args.min_odds}")
     print(f"Maks odds:            {args.maks_odds}")
-    print(f"Kelly-fraksjon:       {args.kelly_fraksjon}")
+    if args.flat:
+        print(f"Kelly-fraksjon:       (flat stake, se under)")
+        print(f"Flat innsats:         {backtest.flat_innsats_belop(args.startkapital)} kr")
+    else:
+        print(f"Kelly-fraksjon:       {args.kelly_fraksjon}")
     print(f"Startkapital:         {args.startkapital}")
     print(f"Min treningskamper:   {args.min_treningskamper}")
     print(f"Features-fil:         {args.features_fil}")
