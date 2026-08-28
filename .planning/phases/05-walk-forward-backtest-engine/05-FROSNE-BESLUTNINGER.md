@@ -7,7 +7,7 @@ kjoringskatalog: "backtests/20260828-095233-3cc4a836"
 manifest_fil: "backtests/20260828-095233-3cc4a836/manifest.json"
 ledger_fil: "backtests/20260828-095233-3cc4a836/ledger.csv"
 sweep_fil: "backtests/20260828-095233-3cc4a836/kelly_sweep.json"
-git_head: "33bbae133de71c47a95170a3a2f8a2e97b30d8dc"
+git_head: "33bbae11d63b06522f35d3fc55a22283b75379a1"
 frosset: true
 frosset_dato: 2026-08-28
 godkjent_av: "Utvikleren, via to eksplisitte AskUserQuestion-runder i økten: (1) 'Freeze tight threshold (0.20/2.50) + flat staking (Recommended)' etter kalibreringsfiksen, (2) tidligere 'Fix calibration methodology first (Recommended)' da metningsfunnet ble presentert. Direkte utvikler-svar, ikke agent-relayed."
@@ -85,7 +85,7 @@ kalibreringsfiksen i commit `33bbae1`):
 
 - **run_id:** `20260828-095233-3cc4a836`
 - **Kjøringskatalog:** `backtests/20260828-095233-3cc4a836/`
-- **git_head (denne kjøringen ble produsert etter):** `33bbae133de71c47a95170a3a2f8a2e97b30d8dc`
+- **git_head (denne kjøringen ble produsert etter):** `33bbae11d63b06522f35d3fc55a22283b75379a1`
 - **manifest["type"]:** `"tuning"`
 - **opprettet:** `2026-08-28T09:52:33.457226`
 
