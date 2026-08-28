@@ -36,6 +36,20 @@ from modell_utils import KalibrertModell
 DATO_KOLONNE = "GAME_DATE_HJEMME"  # Kolonnen alle kronologiske splitter sorterer/filtrerer på
 MAAL_KOLONNE = "HJEMME_VANT"       # Det binære målet: vant hjemmelaget kampen?
 KALIBRER_ANDEL = 0.15              # Andel av as_of-vinduet (nyest først) som går til kalibrering
+# D-05-05 (post-05-12-frysing, fase 5): en ren andel ga kalibreringssett så
+# små som ~15 kamper ved MIN_TRENINGSKAMPER=100 (100*0.15=15) — langt under
+# selv fase 3s ENGANGS-kalibreringssett på 172 kamper, som fase 3 SELV
+# allerede flagget som "godt under sklearns anbefalte ~1000" med en egen
+# ADVARSEL (03-02-SUMMARY.md). 15 kamper er isotonic regression sin
+# metning-kant (en kort rekke like utfall ved score-ekstremet fikser
+# kalibreringskurven flatt på 1.0/0.0), observert i praksis som ~38% av
+# bets i en reell fase-5-kjøring med modell_prob==1.0. Disse to konstantene
+# løfter en ABSOLUTT gulv på kalibreringsbolken UTEN å røre
+# backtest.MIN_TRENINGSKAMPER (som flere allerede eksekverte planers
+# tellertall — 318/15/303/2302/13 — er låst mot); løser derfor kun
+# metnings-symptomet innenfor den allerede fastsatte vindu-størrelsen.
+MIN_KALIBRERINGSKAMPER = 50        # Absolutt gulv på kalibreringsbolkens størrelse, uansett andel
+MIN_TRENING_ETTER_KALIBRERING = 50  # Treningsbolken skal aldri krympes under dette for å mate gulvet over
 FEATURE_PREFIKSER = ("DIFF_", "HJEMME_RULL_", "BORTE_RULL_")  # Prefiksene som definerer feature-settet
 
 
@@ -102,6 +116,27 @@ def del_for_trening(df, as_of=None, kalibrer_andel=KALIBRER_ANDEL, dato_kolonne=
 
     kutt = int(len(vindu_df) * (1 - kalibrer_andel))
     kutt = min(max(kutt, 1), len(vindu_df) - 1)  # begge bolker skal ha minst 1 rad
+
+    # D-05-05: to symmetriske absolutte gulv, begge uttrykt som grenser på
+    # `kutt` (øvre indeks for treningsbolken — `len(vindu_df) - kutt` er
+    # kalibreringsbolkens størrelse, så et LAVERE kutt betyr en STØRRE
+    # kalibreringsbolk og omvendt).
+    #
+    # 1) Kalibreringsgulvet: hvis andelen ville gitt et kalibreringssett
+    #    under MIN_KALIBRERINGSKAMPER, senk kutt (voks kalibreringsbolken).
+    onsket_kutt_for_kalibrer_gulv = len(vindu_df) - MIN_KALIBRERINGSKAMPER
+    if onsket_kutt_for_kalibrer_gulv < kutt:
+        kutt = max(onsket_kutt_for_kalibrer_gulv, 1)
+
+    # 2) Treningsgulvet: hvis (1) — eller en ekstrem kalibrer_andel i seg
+    #    selv — presset kutt under MIN_TRENING_ETTER_KALIBRERING, løft det
+    #    tilbake opp. Anvendes ETTER (1) slik at treningsgulvet alltid vinner
+    #    hvis de to gulvene skulle kollidere i et vindu mindre enn summen av
+    #    dem — MIN_TRENINGSKAMPER=100 (backtest.py) og de to like store
+    #    50-gulvene her betyr denne kollisjonen aldri inntreffer i praksis,
+    #    men funksjonen skal likevel aldri returnere en tren-bolk på 0 rader.
+    if kutt < MIN_TRENING_ETTER_KALIBRERING:
+        kutt = min(MIN_TRENING_ETTER_KALIBRERING, len(vindu_df) - 1)
 
     tren_indekser = vindu_df.index[:kutt]
     kalibrer_indekser = vindu_df.index[kutt:]

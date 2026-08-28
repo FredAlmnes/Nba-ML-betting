@@ -49,6 +49,24 @@ def features_df():
     })
 
 
+@pytest.fixture
+def features_df_stor():
+    """500 fortløpende dagsdatoer — over D-05-05s kalibreringsgulv (50) ved
+    både 0.15 og 0.30 andel, så andelen alene styrer bolk-størrelsen her."""
+    n = 500
+    datoer = pd.date_range("2022-01-01", periods=n, freq="D")
+    return pd.DataFrame({
+        "GAME_DATE_HJEMME": datoer,
+        "HJEMME_VANT":      [i % 2 for i in range(n)],
+        "DIFF_PTS":         [float(i % 2) * 2 - 1 for i in range(n)],
+        "DIFF_REB":         [float((i + 1) % 2) * 2 - 1 for i in range(n)],
+        "HJEMME_RULL_PTS":  [100.0 + (i % 5) for i in range(n)],
+        "HJEMME_RULL_REB":  [40.0 + (i % 3) for i in range(n)],
+        "BORTE_RULL_PTS":   [95.0 + (i % 4) for i in range(n)],
+        "BORTE_RULL_REB":   [38.0 + (i % 2) for i in range(n)],
+    })
+
+
 # ---------------------------------------------------------------------------
 # velg_feature_kolonner
 # ---------------------------------------------------------------------------
@@ -111,16 +129,53 @@ def test_as_of_split_er_disjunkt_og_kronologisk(features_df):
     assert datoer[tren_mask].max() < datoer[kalibrer_mask].min()
 
 
-def test_kalibrer_andel_styrer_stoerrelsen(features_df):
+def test_kalibrer_andel_gulvet_slaar_inn_under_terskelen(features_df):
+    """
+    D-05-05: ved n=100 gir BÅDE 0.15 og 0.30 en naturlig kalibreringsbolk
+    (15 og 30 kamper) under MIN_KALIBRERINGSKAMPER=50 — gulvet løftes derfor
+    til nøyaktig 50/50 i begge tilfeller, uavhengig av andelen. Dette er
+    IKKE lenger et bevis på at andelen "styrer størrelsen" ved denne
+    vindu-størrelsen — det beviset flyttes til den store fixturen under.
+    """
     as_of = features_df["GAME_DATE_HJEMME"].iloc[-1] + pd.Timedelta(days=1)
 
     tren_mask, kalibrer_mask, _ = model.del_for_trening(features_df, as_of=as_of, kalibrer_andel=0.15)
-    assert tren_mask.sum() == 85
-    assert kalibrer_mask.sum() == 15
+    assert tren_mask.sum() == model.MIN_TRENING_ETTER_KALIBRERING == 50
+    assert kalibrer_mask.sum() == model.MIN_KALIBRERINGSKAMPER == 50
 
     tren_mask2, kalibrer_mask2, _ = model.del_for_trening(features_df, as_of=as_of, kalibrer_andel=0.30)
-    assert tren_mask2.sum() == 70
-    assert kalibrer_mask2.sum() == 30
+    assert tren_mask2.sum() == 50
+    assert kalibrer_mask2.sum() == 50
+
+
+def test_kalibrer_andel_styrer_stoerrelsen_over_gulvet(features_df_stor):
+    """
+    Over gulvet (n=500: 0.15*500=75 > 50, 0.30*500=150 > 50) styrer andelen
+    fortsatt bolk-størrelsen proporsjonalt, akkurat som før D-05-05 —
+    gulvet er en nedre grense, ikke en ny fast regel.
+    """
+    as_of = features_df_stor["GAME_DATE_HJEMME"].iloc[-1] + pd.Timedelta(days=1)
+
+    tren_mask, kalibrer_mask, _ = model.del_for_trening(features_df_stor, as_of=as_of, kalibrer_andel=0.15)
+    assert tren_mask.sum() == 425
+    assert kalibrer_mask.sum() == 75
+
+    tren_mask2, kalibrer_mask2, _ = model.del_for_trening(features_df_stor, as_of=as_of, kalibrer_andel=0.30)
+    assert tren_mask2.sum() == 350
+    assert kalibrer_mask2.sum() == 150
+
+
+def test_kalibreringsgulvet_krymper_aldri_treningsbolken_under_sitt_eget_gulv(features_df):
+    """
+    D-05-05: selv med en kalibrer_andel som ville bedt om nesten hele
+    vinduet til kalibrering, skal treningsbolken aldri krympes under
+    MIN_TRENING_ETTER_KALIBRERING — de to gulvene beskytter hverandre.
+    """
+    as_of = features_df["GAME_DATE_HJEMME"].iloc[-1] + pd.Timedelta(days=1)
+
+    tren_mask, kalibrer_mask, _ = model.del_for_trening(features_df, as_of=as_of, kalibrer_andel=0.9)
+    assert tren_mask.sum() >= model.MIN_TRENING_ETTER_KALIBRERING
+    assert tren_mask.sum() + kalibrer_mask.sum() == 100
 
 
 def test_for_lite_vindu_gir_verdifeil(features_df):
