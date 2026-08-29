@@ -24,6 +24,7 @@ from datetime import date, datetime, timedelta
 
 import backtest
 import config
+import model
 
 
 # ---------------------------------------------------------------------------
@@ -515,6 +516,31 @@ def main():
         parser.error(
             f"--min-odds ({args.min_odds}) må være strengt under "
             f"--maks-odds ({args.maks_odds})"
+        )
+
+    # 10. En negativ terskel ville flagget nesten hver kamp med noe
+    #     modell-edge som en value bet, uten feil eller advarsel.
+    if args.min_value_terskel < 0:
+        parser.error(
+            f"--min-value-terskel ({args.min_value_terskel}) er negativ — "
+            "dette ville flagget nesten hver kamp med noe modell-edge som "
+            "en value bet"
+        )
+
+    # 11. D-05-05s kalibreringsgulv (model.MIN_KALIBRERINGSKAMPER +
+    #     model.MIN_TRENING_ETTER_KALIBRERING = 100) forutsetter at
+    #     min_treningskamper aldri er lavere — se model.py:131-137s
+    #     kommentar. Et lavere vindu her kollapser kalibreringsbolken under
+    #     sitt eget gulv, stille, og gjeninnfører nøyaktig
+    #     isotonic-metningsbuggen D-05-05 fikset (05-REVIEW.md CR-01).
+    _min_vindu = model.MIN_KALIBRERINGSKAMPER + model.MIN_TRENING_ETTER_KALIBRERING
+    if args.min_treningskamper < _min_vindu:
+        parser.error(
+            f"--min-treningskamper ({args.min_treningskamper}) er under "
+            f"model.MIN_KALIBRERINGSKAMPER + model.MIN_TRENING_ETTER_KALIBRERING "
+            f"({_min_vindu}) — et mindre vindu kan kollidere med "
+            "kalibreringsgulvet og stille gjeninnføre isotonic-metningsbuggen "
+            "D-05-05 fikset."
         )
 
     modus = "holdout" if args.holdout else "tuning"

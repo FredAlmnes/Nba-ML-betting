@@ -118,6 +118,45 @@ def test_cli_avviser_kellyfraksjon_null(tmp_path):
     assert "flat" in resultat_null.stderr.lower()
 
 
+def test_cli_avviser_min_treningskamper_under_kalibreringsgulvet(tmp_path, cli):
+    """05-REVIEW.md CR-01: et --min-treningskamper under
+    model.MIN_KALIBRERINGSKAMPER + model.MIN_TRENING_ETTER_KALIBRERING (100)
+    kan kollapse kalibreringsbolken under sitt eget gulv og stille
+    gjeninnføre D-05-05s isotonic-metningsbugg. Må avvises før noe kjøres."""
+    for verdi in ["60", "99"]:
+        resultat = _kjor_cli([
+            "--min-treningskamper", verdi, "--katalog", str(tmp_path / f"ubrukt-{verdi}"),
+        ])
+        assert resultat.returncode == 2, (verdi, resultat.stderr)
+        assert "kalibreringsgulvet" in resultat.stderr.lower()
+        assert not (tmp_path / f"ubrukt-{verdi}").exists()
+
+    # Boundary: 100 (== model.MIN_KALIBRERINGSKAMPER + MIN_TRENING_ETTER_KALIBRERING)
+    # must NOT be rejected by this specific check — parser-level only, no real run.
+    parser = cli.bygg_parser()
+    args = parser.parse_args(["--min-treningskamper", "100"])
+    assert not (args.min_treningskamper < cli.model.MIN_KALIBRERINGSKAMPER + cli.model.MIN_TRENING_ETTER_KALIBRERING)
+
+
+def test_min_treningskamper_gulv_matcher_model_konstantene(cli):
+    """Selve tallet 100 i grensesjekken skal alltid være DE FAKTISKE
+    model.py-konstantene lagt sammen, aldri en hardkodet literal -- ellers
+    driver CLI-en og model.py fra hverandre uten at noen test fanger det."""
+    assert cli.model.MIN_KALIBRERINGSKAMPER == 50
+    assert cli.model.MIN_TRENING_ETTER_KALIBRERING == 50
+
+
+def test_cli_avviser_negativ_min_value_terskel(tmp_path):
+    """05-REVIEW.md WR-01: en negativ terskel ville flagget nesten hver
+    kamp med noe modell-edge som en value bet, uten feil eller advarsel."""
+    resultat = _kjor_cli([
+        "--min-value-terskel", "-0.1", "--katalog", str(tmp_path / "ubrukt"),
+    ])
+    assert resultat.returncode == 2, resultat.stderr
+    assert "negativ" in resultat.stderr.lower()
+    assert not (tmp_path / "ubrukt").exists()
+
+
 def test_cli_avviser_min_odds_over_maks_odds(tmp_path):
     resultat = _kjor_cli([
         "--min-odds", "4.5", "--maks-odds", "2.0",
