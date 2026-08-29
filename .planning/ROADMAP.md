@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Shared Core Extraction & Test Foundation** - Feature/team/strategy logic lives in one place with tests, no more silent drift (completed 2026-08-21)
 - [x] **Phase 3: Calibration Remediation** - Isotonic calibrator fit/evaluated on properly separated data, closing a confirmed leak (completed 2026-08-23)
 - [x] **Phase 4: Historical Odds Acquisition & Live Refactor** - Historical odds permanently archived; live bot runs on the shared core (completed 2026-08-24)
-- [ ] **Phase 5: Walk-Forward Backtest Engine** - Full strategy replayed chronologically against history with holdout-gated, versioned ROI/drawdown/CLV results
+- [x] **Phase 5: Walk-Forward Backtest Engine** - Full strategy replayed chronologically against history with holdout-gated, versioned ROI/drawdown/CLV results (completed 2026-08-29)
 
 ## Phase Details
 
@@ -168,6 +168,13 @@ Plans:
   4. A backtest run produces a reproducible, versioned run manifest (config + date range + ROI + win rate + max drawdown + bet count + confidence interval), enabling a clear before/after comparison against the current losing live configuration
   5. Closing Line Value (CLV) is reported per bet and in aggregate, and a Kelly-fraction sensitivity sweep (flat/quarter/half/full) shows how sensitive reported ROI is to the staking assumption
 
+**Utfall:**
+1. → 05-07 (prediksjonspass/holdout-vakt), 05-12 (full tuning-slice-kjøring med sweep)
+2. → 05-06 (as-of skadefilter), 05-07 (as-of prediksjonspass), 05-11 (live-vs-backtest beslutningsparitet-test)
+3. → 05-13 — holdout checked exactly once, run_id `20260829-092351-3cc4a836`, see `05-HOLDOUT-RESULTAT.md`
+4. → 05-08 (manifest.json/ledger.csv per kjøring) pluss `05-HOLDOUT-RESULTAT.md` §6 (før/etter mot dagens tapende live-oppsett)
+5. → 05-03/05-09 (CLV-beregning, Kelly-sweep) pluss den frosne tuning-kjøringens `kelly_sweep.json`
+
 **Plans**: 13 plans
 
 Plans:
@@ -213,7 +220,7 @@ Plans:
 
 **Wave 10** *(blocked on Wave 9)*
 
-- [ ] 05-13-PLAN.md — Holdouten brukes én gang: blokkerende port, én kjøring mot 2024-25, før/etter mot dagens tapende oppsett
+- [x] 05-13-PLAN.md — Holdouten brukes én gang: blokkerende port, én kjøring mot 2024-25, før/etter mot dagens tapende oppsett
 
 ## Progress
 
@@ -226,4 +233,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 2. Shared Core Extraction & Test Foundation | 6/6 | Complete    | 2026-08-21 |
 | 3. Calibration Remediation | 2/2 | Complete   | 2026-08-23 |
 | 4. Historical Odds Acquisition & Live Refactor | 9/9 | Complete   | 2026-08-24 |
-| 5. Walk-Forward Backtest Engine | 12/13 | In Progress|  |
+| 5. Walk-Forward Backtest Engine | 13/13 | Complete   | 2026-08-29 |

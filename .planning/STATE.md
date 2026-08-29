@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 05-10-PLAN.md
-last_updated: "2026-08-28T07:56:37.150Z"
-last_activity: 2026-08-28
+status: phase_complete
+stopped_at: Phase 05 complete (13/13) — holdout spent, milestone v1.0 evidence in hand
+last_updated: "2026-08-29T07:30:10Z"
+last_activity: 2026-08-29
 progress:
   total_phases: 5
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 35
-  completed_plans: 34
-  percent: 80
+  completed_plans: 35
+  percent: 100
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 
 ## Current Position
 
-Phase: 5 (Walk-Forward Backtest Engine) — EXECUTING
+Phase: 5 (Walk-Forward Backtest Engine) — COMPLETE
 Plan: 13 of 13
-Status: Ready to execute
-Last activity: 2026-08-28
+Status: Complete
+Last activity: 2026-08-29
 
-Progress: [█████████░] 91%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -87,6 +87,22 @@ Progress: [█████████░] 91%
 | Phase 05 P10 | 10min | 3 tasks | 3 files |
 
 ## Accumulated Context
+
+### Holdout-status (BT-03)
+
+HOLDOUT BRUKT: ja
+run_id: 20260829-092351-3cc4a836
+dato: 2026-08-29
+kommando: `./venv/bin/python3 08_kjor_backtest.py --holdout --bekreft-holdout --min-value-terskel 0.20 --maks-odds 2.50 --flat`
+resultat: .planning/phases/05-walk-forward-backtest-engine/05-HOLDOUT-RESULTAT.md
+frys: .planning/phases/05-walk-forward-backtest-engine/05-FROSNE-BESLUTNINGER.md (frys_run_id 20260828-095233-3cc4a836)
+dom: Ikke avgjort
+
+Den 2024-25-sesongen er ikke lenger ute-av-utvalg for dette prosjektet — verken for denne planen,
+denne milepælen, eller en senere økt. Milepæl v1.0 har nå brukt sin ene tillatte holdout-evaluering.
+En ny ute-av-utvalg-vurdering krever nye data (2025-26-sesongen), ikke en ny kjøring mot 2024-25.
+`backtests/` er gitignored, så denne blokken — ikke den gitignored kjørekatalogen — er det
+varige registeret over at holdouten er brukt.
 
 ### Decisions
 
@@ -159,6 +175,9 @@ Recent decisions affecting current work:
 - [Phase 05]: Plan 12: discovered a real isotonic-calibration bug during the freeze checkpoint — KALIBRER_ANDEL=0.15 applied to small walk-forward windows produced calibration sets as small as ~15 games, saturating modell_prob to exactly 1.0 for up to 38% of bets in some samples. Fixed with an absolute 50-game floor (D-05-05, model.py MIN_KALIBRERINGSKAMPER/MIN_TRENING_ETTER_KALIBRERING, commit 33bbae1) — saturation dropped to ~3.5% in the live-config slice. This is a permanent fix affecting every future walk-forward run, not scoped to this one freeze.
 - [Phase 05]: Plan 12: added --flat as a first-class 08_kjor_backtest.py run mode (commit 404621b) so a flat-staking freeze decision is actually reproducible by plan 05-13 — flat previously existed only as a --sweep arm (original D-05-03 design), which would have made the chosen frozen config unexecutable for the holdout run.
 - [Phase 05]: Plan 12: froze min_value_terskel=0.20, maks_odds=2.50, flat staking (20kr/bet) — a real deviation from the live bot's config (0.05, half-Kelly) — after the live config showed no statistically meaningful edge even post-calibration-fix (461 bets, ROI -1.3%, CI straddles zero), while the tighter config showed ROI +15.0%/CLV +2.08% (52 bets) that survived excluding residual-saturation bets (ROI +10.2%/CLV +2.32% on 36 "clean" bets). Sample is still small — CI does not exclude zero. Full decision trail in 05-FROSNE-BESLUTNINGER.md. No config.py value was changed; this is a CLI-argument freeze for plan 05-13 only.
+- [Phase 05]: Plan 13: spent the locked 2024-25 holdout exactly once under the frozen configuration (run_id 20260829-092351-3cc4a836), after direct developer approval ("Yes, run the holdout now") given in-session in response to an explicit checkpoint stating the irreversibility and the tuning-slice's own small-sample caveat — three independent pre-flight scans confirmed the holdout was unspent and the engine was byte-unchanged since the freeze's git_head before the run.
+- [Phase 05]: Plan 13: verdict against the Core Value gate is "Ikke avgjort" — 19 bets, ROI -25.0% (CI -64.5% to +24.6%, straddles zero), win rate 36.8% (CI straddles the 47.9% break-even rate implied by the run's own average odds); antall_bets is far under the ~300-bet threshold for statistical meaning on either side. No new threshold values were proposed after seeing the holdout, since re-tuning against this slice now would be exactly the in-sample anti-pattern BT-03 exists to prevent; a future out-of-sample assessment requires 2025-26 data, not a rerun against 2024-25.
+- [Phase 05]: Plan 13: fixed two stale artifacts left by plan 05-12's completion as blocking issues under Task 3's own precondition gate (Rule 1) — 05-VALIDATION.md's frontmatter `status` still read `draft` despite the sign-off checklist being closed and approved, and the Manual-Only Verifications table had no `Utfall` outcome column at all even though plan 05-12's own SUMMARY claimed the checklist was closed; both fixed in this plan's own edit to 05-VALIDATION.md rather than treated as a phase-closure blocker, since the substance (all sign-off checkboxes, the Approval line, and the BT-01..BT-07 Per-Task Verification Map rows) was already correct.
 
 ### Pending Todos
 
@@ -180,6 +199,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-08-27T21:01:00.465Z
-Stopped at: Completed 05-10-PLAN.md
+Last session: 2026-08-29T07:30:10Z
+Stopped at: Completed 05-13-PLAN.md
 Resume file: None

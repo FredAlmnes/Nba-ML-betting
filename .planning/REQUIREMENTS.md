@@ -85,9 +85,9 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 | ODDS-02 | Phase 4 | Complete |
 | BT-01 | Phase 5 | Complete |
 | BT-02 | Phase 5 | Complete |
-| BT-03 | Phase 5 | Complete |
+| BT-03 | Phase 5 | Complete (holdout checked exactly once, run_id `20260829-092351-3cc4a836`, 2026-08-29 — see `05-HOLDOUT-RESULTAT.md`) |
 | BT-04 | Phase 5 | Complete |
-| BT-05 | Phase 5 | Complete |
+| BT-05 | Phase 5 | Complete (before/after comparison against the losing live config in `05-HOLDOUT-RESULTAT.md` §6) |
 | BT-06 | Phase 5 | Complete |
 | BT-07 | Phase 5 | Complete |
 
@@ -98,4 +98,4 @@ Populated during roadmap creation. See .planning/ROADMAP.md for phase details.
 
 ---
 *Requirements defined: 2026-08-19*
-*Last updated: 2026-08-19 after roadmap creation*
+*Last updated: 2026-08-29 after Phase 5 completion*

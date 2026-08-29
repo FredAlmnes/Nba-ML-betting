@@ -1,7 +1,7 @@
 ---
 phase: 5
 slug: walk-forward-backtest-engine
-status: draft
+status: complete
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-08-24
@@ -97,10 +97,10 @@ Run from the repo root with the venv active (`source venv/bin/activate`), 2026-0
 
 ## Manual-Only Verifications
 
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| Full-history backtest run produces plausible, non-degenerate ROI/drawdown numbers (not just correct plumbing) | BT-01, BT-04 | Statistical plausibility of a real multi-season run isn't a unit-testable assertion — it requires human judgment on whether the numbers look sane before trusting them for a go/no-go decision | Run `08_kjor_backtest.py` end-to-end against the full train/calibrate slice (2022-23+2023-24), inspect `manifest.json` for a sane bet count, ROI within a plausible range, and a CI width that isn't absurdly wide for the sample size |
-| Final locked-holdout run is checked exactly once and matches the "checked once" intent | BT-03 | Enforcing "exactly once" as a runtime invariant across the *project's lifetime* (not just one process run) isn't mechanically testable in a unit test — it's a human-process guarantee the code only makes structurally hard to violate accidentally | Before running `kjor_endelig_holdout_backtest()`, manually confirm no prior holdout run exists for this config; after running, record the run_id/date in STATE.md so future sessions know the holdout has been spent |
+| Behavior | Requirement | Why Manual | Test Instructions | Utfall |
+|----------|-------------|------------|-------------------|--------|
+| Full-history backtest run produces plausible, non-degenerate ROI/drawdown numbers (not just correct plumbing) | BT-01, BT-04 | Statistical plausibility of a real multi-season run isn't a unit-testable assertion — it requires human judgment on whether the numbers look sane before trusting them for a go/no-go decision | Run `08_kjor_backtest.py` end-to-end against the full train/calibrate slice (2022-23+2023-24), inspect `manifest.json` for a sane bet count, ROI within a plausible range, and a CI width that isn't absurdly wide for the sample size | ✅ utført 2026-08-28 — run_id `20260828-095233-3cc4a836` (tuning-slice, frosset konfigurasjon), 52 bets, ROI 15.0% (KI -11.9% – 42.9%), maks drawdown 7.8%; se `05-FROSNE-BESLUTNINGER.md` |
+| Final locked-holdout run is checked exactly once and matches the "checked once" intent | BT-03 | Enforcing "exactly once" as a runtime invariant across the *project's lifetime* (not just one process run) isn't mechanically testable in a unit test — it's a human-process guarantee the code only makes structurally hard to violate accidentally | Before running `kjor_endelig_holdout_backtest()`, manually confirm no prior holdout run exists for this config; after running, record the run_id/date in STATE.md so future sessions know the holdout has been spent | ✅ utført 2026-08-29 — run_id `20260829-092351-3cc4a836`, holdouten er brukt nøyaktig én gang; se `05-HOLDOUT-RESULTAT.md` |
 
 ---
 
