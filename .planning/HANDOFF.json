@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-08-29T08:19:00.021Z",
+  "phase": null,
+  "phase_name": null,
+  "phase_dir": null,
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "context": "milestone-completion",
+  "milestone": "v1.0",
+  "completed_tasks": [
+    {"id": "phase-1-through-5", "name": "All 5 phases of milestone v1.0", "status": "done", "commit": "see .planning/ROADMAP.md"},
+    {"id": "phase-5-code-review", "name": "Phase 5 code review + fixes (CR-01, WR-01)", "status": "done", "commit": "8583c6b"},
+    {"id": "phase-5-verification", "name": "Phase 5 goal verification (5/5 criteria, 7/7 requirements)", "status": "done", "commit": "8c2b178"},
+    {"id": "milestone-audit", "name": "Milestone v1.0 audit (18/18 requirements, 9/9 integration, tech_debt status)", "status": "done", "commit": "09d3a7c"}
+  ],
+  "remaining_tasks": [
+    {"id": "complete-milestone", "name": "Run /gsd:complete-milestone v1.0 to archive and tag", "status": "not_started"},
+    {"id": "cleanup", "name": "Run /gsd:cleanup after complete-milestone", "status": "not_started"},
+    {"id": "tech-debt-decision", "name": "Decide: continue with 3 remaining minor tech-debt items tracked in backlog, or address them first (see .planning/v1.0-MILESTONE-AUDIT.md)", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [
+    {"action": "Decide whether to complete the milestone now (tech debt is non-blocking) or address the 3 remaining minor tech-debt items first", "context": "AskUserQuestion was posed with this exact choice; user redirected to a session handoff instead of answering — decision is still open for whoever resumes", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Froze tuning-slice configuration at min_value_terskel=0.20, maks_odds=2.50, flat staking (20kr/bet) instead of the live bot's default (0.05, half-Kelly)", "rationale": "Live config showed no statistically meaningful edge even after fixing a real calibration bug; the tighter config showed a positive-but-small-sample signal (ROI +15.0%, CLV +2.08%, 52 bets) that survived excluding residual-saturation bets", "phase": "5"},
+    {"decision": "Fixed a real isotonic-calibration degeneracy bug (D-05-05) mid-phase-12", "rationale": "KALIBRER_ANDEL=0.15 applied to small walk-forward windows produced calibration sets as small as ~15 games, saturating modell_prob to 1.0 for up to 38% of bets in some samples. Added an absolute 50-game floor.", "phase": "5"},
+    {"decision": "Spent the one-shot 2024-25 holdout on the frozen configuration, with direct developer authorization", "rationale": "Result: ROI -25.0%, 95% CI [-64.5%, +24.6%], 19 bets, verdict 'Ikke avgjort' (undecided) — the promising tuning-slice signal did not survive out-of-sample testing. This is an honest, correctly-reported result, not a failure of the milestone.", "phase": "5"},
+    {"decision": "Milestone audit status: tech_debt (not gaps_found) — 18/18 requirements satisfied, no blockers", "rationale": "4 minor items found, 1 fixed during the audit (stale features.py docstring), 3 deferred as non-blocking follow-ups", "phase": "milestone"}
+  ],
+  "uncommitted_files": [],
+  "next_action": "Ask the user (or decide, if instructed to proceed autonomously) whether to run /gsd:complete-milestone v1.0 now (recommended — tech debt is non-blocking) or address the 3 remaining tech-debt items first. If proceeding: run /gsd:complete-milestone v1.0, then /gsd:cleanup.",
+  "context_notes": "This was a very long single session that executed the entire Phase 5 (13 plans, 10 waves) plus milestone-level audit/review/verification. The core deliverable (walk-forward backtest engine + one-shot holdout evaluation) is DONE and the result is honestly negative/inconclusive — this is a correct, successful outcome for the milestone's actual goal (build a trustworthy measurement instrument), not a bug to fix. Do not re-run the holdout — BT-03 forbids it (see .planning/STATE.md's 'Holdout-status' section, HOLDOUT BRUKT: ja). Read .planning/v1.0-MILESTONE-AUDIT.md and .planning/phases/05-walk-forward-backtest-engine/05-HOLDOUT-RESULTAT.md before making any further changes to the backtest engine or strategy config."
+}
