@@ -8,9 +8,17 @@ scorer modellen). Endres et navn eller en stat-liste her, endres det for
 begge veiene samtidig — det er nettopp den drift-risikoen denne fasen
 finnes for å stenge.
 
-Importeres i dag av 02_feature_engineering.py (batch) og skal senere
-importeres identisk av Phase 5s backtest via as_of-parameteren, uten at
-signaturen trenger å endres videre.
+Importeres av 02_feature_engineering.py (batch). Phase 5s backtest.py
+importerer IKKE denne modulen direkte — den leser i stedet den allerede
+bygde nba_features.csv (produsert av 02_feature_engineering.py, som selv
+kaller beregn_lag_form) og filtrerer den på dato. Dette er en bevisst
+designbeslutning (backtest.py-kommentarer rundt klargjor_backtestdata
+begrunner hvorfor: den rullende vinduet er allerede leakage-safe via
+shift(1) ved bygge-tid, per lag alene, så å date-filtrere den ferdige
+tabellen etterpå er ekvivalent med å regne den på nytt med as_of). En
+tidligere versjon av denne docstringen hevdet feilaktig at backtest.py
+ville importere funksjonen direkte — se
+.planning/v1.0-MILESTONE-AUDIT.md for funnet som korrigerte dette.
 """
 
 import pandas as pd
