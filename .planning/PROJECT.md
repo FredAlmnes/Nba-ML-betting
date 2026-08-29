@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A personal, paper-trading NBA moneyline value-betting system: it trains a calibrated XGBoost model on historical NBA team stats, compares model-implied win probabilities against live bookmaker odds to flag "value" bets, filters out bets where a key player is injured, and tracks a virtual bankroll with half-Kelly stake sizing. No real money is at risk yet — it's a single-user research/validation project run manually or via a daily script.
+A personal, paper-trading NBA moneyline value-betting system: it trains a calibrated XGBoost model on historical NBA team stats, compares model-implied win probabilities against live bookmaker odds to flag "value" bets, filters out bets where a key player is injured, and tracks a virtual bankroll with half-Kelly stake sizing. It also now includes a walk-forward backtest engine that replays the full decision pipeline chronologically against archived historical odds, gated by a one-shot holdout. No real money is at risk yet — it's a single-user research/validation project run manually or via a daily script.
 
 ## Core Value
 
@@ -25,36 +25,40 @@ The bot must demonstrate a **positive, validated ROI over a proper historical ba
 - ✓ `KALIBRERING_RAPPORT.md`/`ENDRINGER_SUMMARY.txt` marked superseded/never-deployed, no longer silently implying their proposed thresholds are live — Phase 1
 - ✓ `features.py`/`strategy.py`/`teams.py` extracted as shared, tested modules — single implementation of feature engineering, value/EV/Kelly math, and team-name resolution, replacing 2-4 independent duplicates each — Phase 2
 - ✓ `config.py` single source-of-truth for the 7 strategy constants, imported by both live scripts — Phase 2
-- ✓ First automated test suite in this repo (pytest, 37 tests) covering stake-sizing, dedup, and a determinism/leakage-safety proof for the shared core — Phase 2
+- ✓ First automated test suite in this repo (pytest, 37 tests, grown to 349 by end of milestone) covering stake-sizing, dedup, and a determinism/leakage-safety proof for the shared core — Phase 2
+- ✓ Isotonic calibration fit and evaluated on disjoint train/calibrate/test slices, closing a confirmed same-slice leakage bug — Phase 3
+- ✓ Historical odds (bet-time and closing) for the full backtest window fetched once and archived permanently in SQLite (480 dates, 187,376 rows) — Phase 4
+- ✓ Live bot (`06_bot.py`) calls the shared core in-process instead of shelling out to `04_value_detector.py`/`05_skadefilter.py` — Phase 4
+- ✓ A walk-forward backtesting framework (`backtest.py`, `08_kjor_backtest.py`) that replays the value-betting strategy (model + value threshold + odds range + injury filter + Kelly staking) chronologically against archived historical odds, with a structurally single-entry holdout guard, and reports ROI/win-rate/drawdown/CLV with bootstrap and Wilson confidence intervals — Phase 5
+- ✓ The one-shot 2024-25 holdout evaluation, spent exactly once under a frozen configuration — Phase 5 (result: inconclusive, see Context)
 
 ### Active
 
 <!-- Current scope. Building toward these. -->
 
-- [ ] A historical backtesting framework that replays the value-betting strategy (model + value threshold + odds range + injury filter + Kelly staking) against historical odds data (The Odds API historical endpoint) and reports realistic ROI/drawdown — not just raw model classification metrics
-- [ ] A validated, data-driven set of strategy parameters (value threshold, odds range, stake sizing) chosen because backtesting shows they work — not guessed/hand-tuned
-- [ ] Root-cause investigation into why the current live config underperforms — model quality, feature set, calibration, threshold choice, or a combination — informed by the backtest rather than assumption
-- [ ] Clear before/after evidence (paper-trading results, backtest results) that the rebuilt/fixed system beats the current losing baseline
+(None yet — v1.0's active requirements were fully delivered. Next milestone requirements TBD via `/gsd:new-milestone`.)
 
 ### Out of Scope
 
 <!-- Explicit boundaries. Includes reasoning to prevent re-adding. -->
 
-- Real-money betting / live wagering integration — not until paper-trading + backtest show sustained positive ROI
+- Real-money betting / live wagering integration — not until paper-trading + backtest show sustained positive ROI (still true: v1.0's holdout result was inconclusive, not positive)
 - Spread and totals markets — starting moneyline-only for v1; may be added later once the moneyline strategy is validated
 - Multi-user / hosted service — this is a single-user personal tool, not a product
+- Re-running the spent 2024-25 holdout — BT-03 permits exactly one out-of-sample check per milestone; a new evaluation requires new data (2025-26 season), not a rerun against 2024-25
 
 ## Context
 
-- **Phase 2 complete (2026-08-21):** feature/team/strategy logic — previously duplicated 2-4x across the pipeline — now lives in single shared modules (`features.py`, `strategy.py`, `teams.py`) plus `config.py`, all imported by the live scripts. First automated tests landed (37 pytest tests). CORE-04's "parity test" was scoped down (per CONTEXT.md D-12) to a determinism/leakage-safety proof on the shared core, since the real live-vs-backtest integration test needs Phase 5's backtest engine to exist — the test file documents this and what Phase 5 must still add. Code review during this phase surfaced 3 pre-existing critical bugs in the developer's own uncommitted `06_bot.py`/`05_skadefilter.py` WIP (now committed per the developer's "include" decision) — none introduced by Phase 2's extraction work, all flagged as follow-up: a stored-XSS path in the dashboard (unescaped team names from The Odds API via `innerHTML`), a bankroll-history double-checkpoint bug that can understate same-day stakes, and a home/away game-result mismatch risk in `hent_kampresultat` when only a reverse fixture is found in the search window. Not yet fixed — most naturally addressed when Phase 4 touches `06_bot.py` again, or sooner if the user prioritizes it.
-- **Phase 1 complete (2026-08-20):** repo hygiene fixed. Leaked Odds API key rotated and moved to env var (`ODDS_API_NOKKEL` via `python-dotenv`); `modell_utils.py` tracked; doc/code drift resolved by marking the never-deployed fix superseded rather than applying its unvalidated numbers. Running thresholds intentionally left unchanged (`MIN_VALUE_TERSKEL=0.05`, `MAX_ODDS=4.00`) — validated values still come from Phase 5's backtest, not from this cleanup. Two items deferred by explicit decision: git-history scrubbing of the old key (destructive, needs separate approval) and deletion of ~471MB of local scratch artifacts (gitignored only, not deleted).
-- **Current state is losing money (in paper trading):** the tracked virtual bankroll fell from 1000 kr to 74.88 kr under the currently-running configuration.
-- **A known fix was never applied:** `ENDRINGER_SUMMARY.txt` / `KALIBRERING_RAPPORT.md` describe raising `MIN_VALUE_TERSKEL` to 0.20, lowering `MAX_ODDS` to 2.50, and adding calibration/confidence filters — but `04_value_detector.py` still runs the old values (`MIN_VALUE_TERSKEL=0.05`, `MAX_ODDS=4.00`). The user was not aware this fix had never made it into the running code.
-- **No strategy backtest exists today.** The model is only evaluated with classification metrics (accuracy/log-loss/Brier) on a 2-month holdout at training time. There has never been a backtest of the full betting decision pipeline (value detection + odds filtering + Kelly staking) against historical odds, which likely explains why threshold tuning has been guesswork.
-- **Historical odds data is available** via The Odds API's historical endpoint, making a proper backtest feasible.
-- **Codebase is a flat, numbered-script batch pipeline** (`01_` → `06_`), no package structure, Norwegian identifiers throughout, no automated tests, no lint/format tooling. Full details in `.planning/codebase/`.
-- **Known code-quality issues** (from codebase mapping): feature-engineering logic duplicated between `02_feature_engineering.py` and `04_value_detector.py` (must be kept in sync manually); team-name lookup logic independently reimplemented in four different files; all pipeline scripts execute top-level code with no `main()` guard (untestable, unimportable).
-- **User is open to rethinking the approach** — not committed to preserving the current architecture if backtesting reveals a more fundamental problem (model, features, or data) rather than just bad thresholds.
+**Current State (as of v1.0 ship, 2026-08-29):**
+
+- **v1.0's actual deliverable — a trustworthy walk-forward backtest engine — is built and works.** It replays the full decision pipeline (model → value threshold → odds filter → injury filter → Kelly stake) chronologically against 187,376 rows of archived historical odds, with a structurally-enforced single-entry holdout guard (not just convention).
+- **The Core Value question ("is this strategy profitable?") came back inconclusive, not positive.** The one-shot 2024-25 holdout (spent under a frozen config: 0.20 value threshold, 2.50 max odds, flat staking) produced ROI -25.0%, 95% CI [-64.5%, +24.6%], on only 19 bets — the sample is far too small to conclude either way. The tuning-slice signal that motivated freezing that config (ROI +15.0%, 52 bets) did not survive out-of-sample testing. This is an honest result from a working instrument, not a bug.
+- **The one-shot holdout is now spent for 2024-25 data.** Re-testing requires the 2025-26 season's data, not a rerun against 2024-25 — this is enforced in code (`HoldoutLaastFeil`), not just policy.
+- **A real, previously-hidden bug was found and fixed along the way:** isotonic calibration on small walk-forward windows (as few as ~15 games) was saturating predicted probabilities to exactly 1.0 for up to 38% of bets in some samples. Fixed with an absolute 50-game floor (`model.py`). This is a permanent fix, not scoped to one run — any future code that fits a calibrator on a small dynamically-sized slice should be checked against this pattern.
+- **The codebase evolved from a flat, duplicated batch pipeline into a shared-core architecture during this milestone.** Feature engineering, team-name resolution, value/EV/Kelly math, and odds-fetching logic each now live in exactly one tested module (`features.py`, `strategy.py`, `teams.py`, `odds.py`, `config.py`, `model.py`, `metrics.py`, `skadefilter.py`, `verdi_deteksjon.py`, `backtest.py`) instead of 2-4 independent copies. 349 automated tests exist where there were none at milestone start.
+- **3 minor, non-blocking tech-debt items remain** (see `.planning/milestones/v1.0-MILESTONE-AUDIT.md`): a burn-in filter edge case in `backtest.py`, redundant CSV I/O in `klargjor_backtestdata`, and a long-standing `gjeldende_sesong()` duplication between `verdi_deteksjon.py` and `skadefilter.py`. None affect the holdout result's validity.
+- **The next decision is a product decision, not a technical one:** what to do with an inconclusive result — gather more data (2025-26 season), try a different model/feature approach, or accept the strategy isn't validated and stop here. The user has not yet decided.
+- **Deferred from Phase 1, still outstanding:** git-history scrubbing of the old leaked API key value (destructive, needs separate approval) and deletion of ~471MB of local scratch artifacts (gitignored only, not deleted from disk).
 
 ## Constraints
 
@@ -67,14 +71,17 @@ The bot must demonstrate a **positive, validated ROI over a proper historical ba
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Backtest the full strategy against historical odds before further threshold tuning | Current losses trace to unvalidated threshold changes and a fix that was written but never deployed; guessing again would repeat the same mistake | — Pending |
-| Start with moneyline only, defer spread/totals | Keeps validation focused; can expand once moneyline strategy is proven | — Pending |
+| Backtest the full strategy against historical odds before further threshold tuning | Current losses trace to unvalidated threshold changes and a fix that was written but never deployed; guessing again would repeat the same mistake | ✓ Good — Phase 5, engine built and holdout spent; result inconclusive |
+| Start with moneyline only, defer spread/totals | Keeps validation focused; can expand once moneyline strategy is proven | ✓ Good — held for the whole milestone, still the right scope |
 | Fix leaked API key, untracked `modell_utils.py`, and doc/code drift as part of this milestone | Flagged as critical during codebase mapping; leaked key is on a public repo and untracked file breaks fresh clones | ✓ Good — Phase 1 |
-| Defer git-history scrubbing and scratch-artifact deletion rather than doing them autonomously | Both are destructive/irreversible; rotating the key neutralizes the practical risk without a force-push, and scratch deletion needs explicit confirmation | — Pending (user decision) |
-| Stay open to architectural changes if backtesting points to a deeper issue (model/features/data), not just thresholds | User explicitly does not want to just re-tune the same broken structure if that's not where the problem is | — Pending |
-| Extract shared core as flat modules at repo root, not a full `nba_betting/` package | Matches existing convention; full package restructure only becomes load-bearing once backtest/live paths must coexist (Phase 4/5) | ✓ Good — Phase 2 |
-| Scope CORE-04's parity test down to a determinism/leakage proof, not a live-vs-backtest integration test | The backtest engine doesn't exist until Phase 5 — the requirement text slightly outran what's buildable yet | ✓ Good — Phase 2, revisit in Phase 5 |
-| Fix 3 critical bugs found in `06_bot.py`/`05_skadefilter.py` during Phase 2 code review | Dashboard XSS, bankroll double-checkpoint, home/away mismatch risk — pre-existing in the developer's own WIP, not introduced by Phase 2 | — Pending (deferred, most naturally Phase 4) |
+| Defer git-history scrubbing and scratch-artifact deletion rather than doing them autonomously | Both are destructive/irreversible; rotating the key neutralizes the practical risk without a force-push, and scratch deletion needs explicit confirmation | — Pending (user decision, still deferred at v1.0 close) |
+| Stay open to architectural changes if backtesting points to a deeper issue (model/features/data), not just thresholds | User explicitly does not want to just re-tune the same broken structure if that's not where the problem is | — Pending — holdout result is inconclusive, not diagnostic; next milestone decides |
+| Extract shared core as flat modules at repo root, not a full `nba_betting/` package | Matches existing convention; full package restructure only becomes load-bearing once backtest/live paths must coexist (Phase 4/5) | ✓ Good — Phase 2, held through Phase 5 without needing a package restructure |
+| Scope CORE-04's parity test down to a determinism/leakage proof, not a live-vs-backtest integration test | The backtest engine doesn't exist until Phase 5 — the requirement text slightly outran what's buildable yet | ✓ Good — Phase 2; Phase 5's `tests/test_parity.py` added the real live-vs-backtest integration proof |
+| Fix 3 critical bugs found in `06_bot.py`/`05_skadefilter.py` during Phase 2 code review | Dashboard XSS, bankroll double-checkpoint, home/away mismatch risk — pre-existing in the developer's own WIP, not introduced by Phase 2 | — Still pending; not addressed by any v1.0 phase, carry forward as a candidate for next milestone |
+| Fix isotonic calibration degeneracy on small walk-forward windows with an absolute 50-game floor (D-05-05) | Small calibration slices (~15 games) were saturating `modell_prob` to 1.0 for up to 38% of bets — a real, previously-hidden bug found mid-Phase-5 | ✓ Good — Phase 5, permanent fix in `model.py` |
+| Freeze tuning-slice config (0.20 threshold, 2.50 max odds, flat staking) for the one-shot holdout, rather than the live bot's default (0.05, half-Kelly) | Live config showed no edge even post-calibration-fix; the tighter config showed a small-sample positive signal that survived a sensitivity check | ⚠️ Revisit — the signal did not survive the holdout (ROI -25.0%, CI straddles zero) |
+| Spend the one-shot 2024-25 holdout under the frozen config, with direct developer authorization | BT-03 permits exactly one out-of-sample check; further in-sample tuning would repeat the original mistake this milestone exists to fix | ✓ Good — process followed correctly; result itself is inconclusive (small sample) not favorable |
 
 ## Evolution
 
@@ -94,4 +101,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-21 after Phase 2 completion*
+*Last updated: 2026-08-29 after v1.0 milestone completion*

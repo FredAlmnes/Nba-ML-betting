@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
+status: Awaiting next milestone
 stopped_at: Completed 05-13-PLAN.md
-last_updated: "2026-08-29T07:35:34.971Z"
-last_activity: 2026-08-29
+last_updated: "2026-08-29T08:23:16.078Z"
+last_activity: 2026-08-29 — Milestone v1.0 completed and archived
 progress:
   total_phases: 5
   completed_phases: 5
@@ -25,12 +25,10 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 
 ## Current Position
 
-Phase: 5 (Walk-Forward Backtest Engine) — COMPLETE
-Plan: 13 of 13
-Status: Phase complete — ready for verification
-Last activity: 2026-08-29
-
-Progress: [██████████] 100%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-29 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
@@ -203,3 +201,7 @@ Items acknowledged and carried forward from previous milestone close:
 Last session: 2026-08-29T07:35:34.966Z
 Stopped at: Completed 05-13-PLAN.md
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
