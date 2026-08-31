@@ -12,6 +12,7 @@ på den lastede bot-modulen erstattes med injiserte stubber via monkeypatch.
 
 import importlib.util
 import json
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pandas as pd
@@ -246,3 +247,91 @@ def test_generer_dashboard_normalt_bet_uendret(monkeypatch, bot, tmp_path):
     assert "Miami Heat" in html
     assert '<tbody id="bet-body">' in html
     assert "const bets" in html
+
+
+# ---------------------------------------------------------------------------
+# CR-02: ett historikkpunkt per dag, skrevet etter oppgjør OG plassering
+# ---------------------------------------------------------------------------
+
+
+def _venter_bet(kamp_dato, kamp="Miami Heat vs Toronto Raptors", bet="Hjemme (Miami Heat)",
+                 odds=2.0, innsats=100.0):
+    return {
+        "dato": kamp_dato,
+        "kamp_dato": kamp_dato,
+        "kamp": kamp,
+        "bet": bet,
+        "odds": odds,
+        "innsats": innsats,
+        "modell": "60.0%",
+        "modell_prob": 0.6,
+        "value": "+5.0%",
+        "ev": "+20.0%",
+        "status": "venter",
+        "gevinst": None,
+    }
+
+
+def test_sjekk_resultater_ruhrer_ikke_historikk(monkeypatch, bot):
+    i_gaar = str(date.today() - timedelta(days=1))
+    bets = [_venter_bet(i_gaar)]
+    historikk_original = [{"dato": "2020-01-01", "saldo": 500.0}]
+    bankroll_data = {"saldo": 1000.0, "historikk": list(historikk_original)}
+
+    monkeypatch.setattr(bot, "hent_kampresultat", lambda *a, **k: "hjemme")
+    bets, bankroll_data = bot.sjekk_resultater(bets, bankroll_data)
+
+    assert bankroll_data["saldo"] == 1100.0
+    assert bankroll_data["historikk"] == historikk_original
+
+
+def test_oppdater_dagens_historikk_oppdaterer_eksisterende_punkt(bot):
+    i_dag = str(date.today())
+    bankroll_data = {"saldo": 850.0, "historikk": [{"dato": i_dag, "saldo": 1000.0}]}
+
+    bankroll_data = bot.oppdater_dagens_historikk(bankroll_data)
+
+    assert len(bankroll_data["historikk"]) == 1
+    assert bankroll_data["historikk"][0]["saldo"] == 850.0
+
+
+def test_oppdater_dagens_historikk_legger_til_nytt_punkt(bot):
+    i_gaar = str(date.today() - timedelta(days=1))
+    i_dag = str(date.today())
+    bankroll_data = {"saldo": 1120.0, "historikk": [{"dato": i_gaar, "saldo": 1000.0}]}
+
+    bankroll_data = bot.oppdater_dagens_historikk(bankroll_data)
+
+    assert len(bankroll_data["historikk"]) == 2
+    assert bankroll_data["historikk"][-1] == {"dato": i_dag, "saldo": 1120.0}
+
+
+def test_sekvens_oppgjor_og_plassering_samme_dag_gir_korrekt_historikkpunkt(monkeypatch, bot):
+    """Reproduserer CR-02-buggen: dagens historikkpunkt skal reflektere saldoen
+    ETTER både oppgjør av gamle bets OG plassering av nye, ikke bare oppgjøret."""
+    i_dag  = str(date.today())
+    i_gaar = str(date.today() - timedelta(days=1))
+
+    bets = [_venter_bet(i_gaar)]
+    bankroll_data = {"saldo": 1000.0, "historikk": [{"dato": i_dag, "saldo": 1000.0}]}
+
+    monkeypatch.setattr(bot, "hent_kampresultat", lambda *a, **k: "hjemme")
+    bets, bankroll_data = bot.sjekk_resultater(bets, bankroll_data)
+
+    value_bets_df = pd.DataFrame([{
+        "Kamp": "Boston Celtics vs New York Knicks",
+        "KampDato": i_dag,
+        "Bet": "Hjemme (Boston Celtics)",
+        "Odds": 1.7,
+        "Modell_prob": 0.65,
+        "Modell %": "65.0%",
+        "Value": "+10.0%",
+        "Forv. EV": "+10.5%",
+    }])
+    bets, bankroll_data, nye = bot.plasser_bets(value_bets_df, bets, bankroll_data)
+    assert nye == 1  # sikrer at innsatsen faktisk ble trukket, ellers tester vi ingenting
+
+    bankroll_data = bot.oppdater_dagens_historikk(bankroll_data)
+
+    dagens_punkt = next(h for h in bankroll_data["historikk"] if h["dato"] == i_dag)
+    assert dagens_punkt["saldo"] == bankroll_data["saldo"]

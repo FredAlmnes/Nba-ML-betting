@@ -170,12 +170,12 @@ def sjekk_resultater(bets, bankroll_data):
 
     if endringer:
         bankroll_data["saldo"] = round(ny_saldo, 2)
-        # Legg til historikkpunkt for i dag
-        if not any(h["dato"] == str(date.today()) for h in bankroll_data["historikk"]):
-            bankroll_data["historikk"].append({
-                "dato": str(date.today()),
-                "saldo": round(ny_saldo, 2)
-            })
+        # Dagens bankroll-loggpunkt skrives IKKE her. Det skrives kun ÉN gang,
+        # helt til slutt i main(), etter at både oppgjør OG dagens nye
+        # innsatser er trukket. Skrives det her, låses dagens loggpunkt til
+        # saldoen FØR dagens innsatser, og "legg til hvis den mangler"-sjekken
+        # i main() hopper da alltid over det riktige tallet (CR-02, se
+        # 02-REVIEW.md).
 
     return bets, bankroll_data
 
@@ -973,6 +973,35 @@ if (historikk.length < 2) {{
     print(f"  Dashboard generert: {DASHBOARD_FIL}")
 
 
+def oppdater_dagens_historikk(bankroll_data):
+    """
+    Skriver/oppdaterer dagens bankroll-historikkpunkt til bankroll_data["saldo"].
+
+    Dette er den ENESTE plassen historikken for i dag skal skrives, og den
+    kalles helt til slutt i main() — etter at både sjekk_resultater (oppgjør
+    av gårsdagens bets) og plasser_bets (dagens nye innsatser) er kjørt. To
+    tilfeller dekkes:
+      (i)  Oppgjør og nye bets samme dag: finnes det alt et punkt for i dag
+           (f.eks. fra en tidligere kjøring samme dag), OPPDATERES saldoen i
+           det i stedet for å hoppes over — ellers fryser dagens punkt til et
+           mellomstadium og korrumperer bankroll-hovedboken (CR-02).
+      (ii) Aller første kjøring: les_bankroll() har alt seedet historikk med
+           et startpunkt for i dag med startkapitalen, FØR noen bets er
+           plassert. Også da må punktet oppdateres til den faktiske saldoen.
+    """
+    i_dag = str(date.today())
+    for punkt in bankroll_data["historikk"]:
+        if punkt["dato"] == i_dag:
+            punkt["saldo"] = bankroll_data["saldo"]
+            return bankroll_data
+
+    bankroll_data["historikk"].append({
+        "dato": i_dag,
+        "saldo": bankroll_data["saldo"]
+    })
+    return bankroll_data
+
+
 # -------------------------------------------------------
 # HOVED-PROGRAM
 # -------------------------------------------------------
@@ -1012,12 +1041,8 @@ def main():
     else:
         print("\nIngen godkjente value bets i dag.")
 
-    # 4. Legg til bankroll-historikk for i dag
-    if not any(h["dato"] == str(date.today()) for h in bankroll_data["historikk"]):
-        bankroll_data["historikk"].append({
-            "dato": str(date.today()),
-            "saldo": bankroll_data["saldo"]
-        })
+    # 4. Skriv/oppdater bankroll-historikk for i dag (etter oppgjør + plassering)
+    bankroll_data = oppdater_dagens_historikk(bankroll_data)
 
     # 5. Lagre og generer dashboard
     lagre_json(BANKROLL_FIL, bankroll_data)
