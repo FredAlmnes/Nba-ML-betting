@@ -34,6 +34,10 @@ nba_spillerlogg_raw.csv
 dashboard.html
 dashboard_tom.html
 
+# Kjørelogg fra launchd-jobben (run_daglig.sh) – lokal driftsdata, samme
+# kategori som bankroll/dashboard-output
+logs/
+
 # macOS
 .DS_Store
 
