@@ -11,6 +11,7 @@ på den lastede bot-modulen erstattes med injiserte stubber via monkeypatch.
 """
 
 import importlib.util
+import json
 from types import SimpleNamespace
 
 import pandas as pd
@@ -183,3 +184,65 @@ def test_bot_kildekode_har_ingen_subprocess_eller_python310_referanse():
     assert "subprocess" not in kildekode
     assert "python3.10" not in kildekode
     assert "PYTHONPATH" not in kildekode
+
+
+# ---------------------------------------------------------------------------
+# CR-01: stored XSS via lagnavn fra The Odds API i dashboard.html
+# ---------------------------------------------------------------------------
+
+
+def _ok_dashboard_bet(kamp="Miami Heat vs Toronto Raptors", value="+4.0%"):
+    return {
+        "dato": "2026-01-15",
+        "kamp_dato": "2026-01-15",
+        "kamp": kamp,
+        "bet": "Hjemme (Miami Heat)",
+        "odds": 1.85,
+        "innsats": 50.0,
+        "modell": "58.0%",
+        "modell_prob": 0.58,
+        "value": value,
+        "ev": "+2.3%",
+        "status": "venter",
+        "gevinst": None,
+    }
+
+
+def _ok_bankroll_data(saldo=1000.0):
+    return {"saldo": saldo, "historikk": [{"dato": "2026-01-15", "saldo": saldo}]}
+
+
+def test_json_til_script_fjerner_alle_mindre_enn_tegn_uten_aa_endre_dataene(bot):
+    data = [{"kamp": "</script><script>alert(1)</script>"}]
+    resultat = bot._json_til_script(data)
+    assert "<" not in resultat
+    assert json.loads(resultat) == data
+
+
+def test_generer_dashboard_escaper_ondsinnet_lagnavn_og_value(monkeypatch, bot, tmp_path):
+    dashboard_fil = tmp_path / "dashboard.html"
+    monkeypatch.setattr(bot, "DASHBOARD_FIL", str(dashboard_fil))
+
+    ondsinnet_bet = _ok_dashboard_bet(
+        kamp="<img src=x onerror=alert(1)> vs </script><script>alert(2)</script>",
+        value="<svg onload=alert(3)>",
+    )
+    bot.generer_dashboard([ondsinnet_bet], _ok_bankroll_data())
+
+    html = dashboard_fil.read_text(encoding="utf-8")
+    assert html.count("</script>") == 2
+    assert "<img src=x onerror=" not in html
+    assert "<svg onload=" not in html
+    assert "\\u003c" in html
+
+
+def test_generer_dashboard_normalt_bet_uendret(monkeypatch, bot, tmp_path):
+    dashboard_fil = tmp_path / "dashboard.html"
+    monkeypatch.setattr(bot, "DASHBOARD_FIL", str(dashboard_fil))
+
+    bot.generer_dashboard([_ok_dashboard_bet()], _ok_bankroll_data())
+
+    html = dashboard_fil.read_text(encoding="utf-8")
+    assert "Miami Heat" in html
+    assert '<tbody id="bet-body">' in html
+    assert "const bets" in html

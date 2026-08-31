@@ -302,11 +302,27 @@ def plasser_bets(value_bets_df, bets, bankroll_data):
 # 4. Generer HTML-dashboard
 # -------------------------------------------------------
 
+def _json_til_script(data):
+    """
+    Serialiserer data til JSON som er trygt å bake rett inn i en <script>-tagg.
+
+    json.dumps() escaper IKKE tegnsekvensen som lukker en script-tagg (`</script>`),
+    så et lagnavn fra The Odds API (tredjepart, se CR-01 i 02-REVIEW.md) kan i
+    dag lukke script-taggen tidlig og starte sin egen — en lagret XSS. Vi
+    erstatter derfor hvert '<'-tegn med sin JSON-unicode-escape. Dette endrer
+    ikke dataene, kun representasjonen: med ensure_ascii=True (standardverdien,
+    beholdt uendret her) kan et '<'-tegn kun forekomme inne i en strengliteral,
+    aldri i selve JSON-syntaksen, så escapen er identisk verdi for enhver
+    JSON/JS-parser.
+    """
+    return json.dumps(data).replace("<", "\\u003c")
+
+
 def generer_dashboard(bets, bankroll_data):
     """Genererer en selvforsynt HTML-fil med alt av data innbakt."""
 
-    historikk_json = json.dumps(bankroll_data["historikk"])
-    bets_json      = json.dumps(bets)
+    historikk_json = _json_til_script(bankroll_data["historikk"])
+    bets_json      = _json_til_script(bets)
     saldo          = bankroll_data["saldo"]
     startkapital   = STARTKAPITAL
     total_pnl      = round(saldo - startkapital, 2)
@@ -832,6 +848,21 @@ setTimeout(() => {{
   }})();
 }})();
 
+/* ══ HTML-ESCAPING AV TREDJEPARTSSTRENGER ══ */
+// Lagnavn og value-strenger kommer fra The Odds API (tredjepart) og skrives
+// rett inn via innerHTML under. Uten denne escapingen kan et ondsinnet
+// lagnavn kjøre vilkårlig markup/script i nettleseren (CR-01, 02-REVIEW.md).
+// Kjedede replace-kall (ikke et objektliteral-oppslag) siden hele denne
+// blokken ligger inne i en Python f-streng og hver klamme må dobles.
+function trygg(verdi) {{
+  return String(verdi)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}}
+
 /* ══ TABELL ══ */
 const tbody = document.getElementById('bet-body');
 if (!bets.length) {{
@@ -848,11 +879,11 @@ if (!bets.length) {{
     const bc = b.status==='vant' ? 'bw' : b.status==='tapte' ? 'bl' : 'bv';
     const bl = b.status==='vant' ? 'Vant' : b.status==='tapte' ? 'Tapte' : 'Venter';
     tbody.innerHTML += `<tr>
-      <td style="color:var(--dim);font-size:12px">${{b.dato.slice(5)}}</td>
-      <td><div class="match-main">${{lag}}</div><div class="match-sub">vs ${{mot}}</div></td>
+      <td style="color:var(--dim);font-size:12px">${{trygg(b.dato.slice(5))}}</td>
+      <td><div class="match-main">${{trygg(lag)}}</div><div class="match-sub">vs ${{trygg(mot)}}</div></td>
       <td><span class="odds-tag">${{b.odds.toFixed(2)}}</span></td>
       <td style="font-size:13px">${{b.innsats.toFixed(0)}} kr</td>
-      <td><span class="val-tag">${{b.value}}</span></td>
+      <td><span class="val-tag">${{trygg(b.value)}}</span></td>
       <td><span class="badge ${{bc}}"><span class="bdot"></span>${{bl}}</span></td>
       <td>${{resH}}</td>
     </tr>`;
@@ -896,7 +927,7 @@ if (historikk.length < 2) {{
   }});
   const stp = Math.max(1, Math.ceil(n/5));
   for (let i=0; i<n; i+=stp)
-    xlbl += `<text x="${{xS(i)}}" y="${{H-3}}" text-anchor="middle" font-size="10" fill="#4a5070">${{historikk[i].dato.slice(5)}}</text>`;
+    xlbl += `<text x="${{xS(i)}}" y="${{H-3}}" text-anchor="middle" font-size="10" fill="#4a5070">${{trygg(historikk[i].dato.slice(5))}}</text>`;
 
   chartEl.innerHTML = `
     <svg width="100%" viewBox="0 0 ${{W}} ${{H}}" style="overflow:visible">
@@ -920,7 +951,7 @@ if (historikk.length < 2) {{
   chartEl.querySelectorAll('.pt').forEach(pt => {{
     pt.addEventListener('mouseenter', e => {{
       const h=historikk[+e.target.dataset.i], pnl=h.saldo-START;
-      tip.innerHTML=`<div style="color:var(--dim);margin-bottom:4px">${{h.dato}}</div>
+      tip.innerHTML=`<div style="color:var(--dim);margin-bottom:4px">${{trygg(h.dato)}}</div>
         <div style="font-weight:700;font-size:15px">${{h.saldo.toFixed(0)}} kr
         <span style="color:${{pnl>=0?'var(--green)':'var(--red)'}};font-size:12px;margin-left:8px">${{pnl>=0?'+':''}}${{pnl.toFixed(0)}} kr</span></div>`;
       tip.style.opacity='1';
