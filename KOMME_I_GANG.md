@@ -96,6 +96,22 @@ out-of-sample-test. `run_id`-en fra den kjøringen må skrives inn i
 
 ---
 
+## Daglig kjøring (launchd)
+
+`run_daglig.sh` er wrapper-skriptet som kjører boten daglig. Det bytter til
+prosjektmappen, bruker `./venv/bin/python3` (ikke system-Python), kjører
+`06_bot.py`, og logger hver kjøring til `logs/run_daglig.log` med et
+tidsstempel per kjøring.
+
+Skriptet er ment å startes automatisk av en launchd-jobb i
+`~/Library/LaunchAgents/` kl. 14:00 lokal tid — dette er den normale måten å
+bruke boten på, ikke å kjøre `06_bot.py` for hånd hver dag. Du kan likevel
+kjøre `./run_daglig.sh` manuelt når som helst for å teste oppsettet.
+
+`logs/` er git-ignorert.
+
+---
+
 ## Hva betyr resultatene?
 
 - **Modell %** – vår modells estimerte sannsynlighet for seier
