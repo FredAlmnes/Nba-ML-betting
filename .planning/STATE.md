@@ -5,7 +5,7 @@ milestone_name: milestone
 status: Awaiting next milestone
 stopped_at: Completed 05-13-PLAN.md
 last_updated: "2026-08-29T08:23:16.078Z"
-last_activity: 2026-08-31 - Completed quick task 260831-c4z: Fix three known bugs in 06_bot.py: dashboard XSS (CR-01), bankroll double-checkpoint (CR-02), home/away game-result mismatch (CR-03)
+last_activity: 2026-08-31 - Completed quick task 260831-hij: Create run_daglig.sh launchd wrapper for daily 06_bot.py runs
 progress:
   total_phases: 5
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 Phase: Milestone v1.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-31 — Fixed CR-01/CR-02/CR-03 in 06_bot.py (quick task 260831-c4z)
+Last activity: 2026-08-31 — Created run_daglig.sh launchd wrapper for daily runs (quick task 260831-hij)
 
 ## Performance Metrics
 
@@ -193,6 +193,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260831-c4z | Fix three known bugs in 06_bot.py: dashboard XSS (CR-01), bankroll double-checkpoint (CR-02), home/away game-result mismatch (CR-03) | 2026-08-31 | 4bb7e3d | [260831-c4z-fix-three-known-bugs-in-06-bot-py-dashbo](./quick/260831-c4z-fix-three-known-bugs-in-06-bot-py-dashbo/) |
+| 260831-hij | Create run_daglig.sh launchd wrapper so 06_bot.py can be scheduled daily | 2026-08-31 | e2505bf | [260831-hij-create-a-wrapper-shell-script-run-daglig](./quick/260831-hij-create-a-wrapper-shell-script-run-daglig/) |
 
 ## Deferred Items
 
