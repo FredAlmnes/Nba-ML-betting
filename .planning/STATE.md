@@ -5,7 +5,7 @@ milestone_name: milestone
 status: Awaiting next milestone
 stopped_at: Completed 05-13-PLAN.md
 last_updated: "2026-08-29T08:23:16.078Z"
-last_activity: 2026-08-29 — Milestone v1.0 completed and archived
+last_activity: 2026-08-31 - Completed quick task 260831-c4z: Fix three known bugs in 06_bot.py: dashboard XSS (CR-01), bankroll double-checkpoint (CR-02), home/away game-result mismatch (CR-03)
 progress:
   total_phases: 5
   completed_phases: 5
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-19)
 Phase: Milestone v1.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-29 — Milestone v1.0 completed and archived
+Last activity: 2026-08-31 — Fixed CR-01/CR-02/CR-03 in 06_bot.py (quick task 260831-c4z)
 
 ## Performance Metrics
 
@@ -187,6 +187,12 @@ None yet.
 - **Phase 4 open budget decision**: The Odds API's free tier (500 credits) is insufficient for a full-season historical backtest; the paid tier (~$30/mo, 20K credits) is needed for ODDS-01. Not yet decided by user — flagged as a decision point at Phase 4 entry, does not block Phases 1-3.
 - Deferred (D-03): git-history scrubbing of the leaked Odds API key value in commit c058a1a — not performed. Requires a destructive force-push on a repo that may have been cloned/forked; needs its own explicit decision. Rotation (Phase 1 Plan 5) neutralizes the leaked value's usefulness; the value remaining readable in history is an accepted residual risk (T-01-15).
 - Deferred (D-08): deletion of scratch artifacts (_linux_pkgs/, _pip_tmp/, _wheels/, _test.bin, test_write.tmp) — not performed. Plan 01 (pre-flight) chose ignore-only (gitignored) over deletion from disk; not revisited by Phase 1.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260831-c4z | Fix three known bugs in 06_bot.py: dashboard XSS (CR-01), bankroll double-checkpoint (CR-02), home/away game-result mismatch (CR-03) | 2026-08-31 | 4bb7e3d | [260831-c4z-fix-three-known-bugs-in-06-bot-py-dashbo](./quick/260831-c4z-fix-three-known-bugs-in-06-bot-py-dashbo/) |
 
 ## Deferred Items
 
