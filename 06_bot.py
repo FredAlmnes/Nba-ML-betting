@@ -109,18 +109,41 @@ def hent_kampresultat(hjemme_lag, borte_lag, kamp_dato):
         if df.empty:
             return None
 
-        # Foretrekk hjemmekamp (vs.) siden betten er lagret som "Hjemme vs Borte"
-        hjemme_kamper = df[df["MATCHUP"].str.contains(r"vs\.", case=False)]
-        rad = hjemme_kamper.iloc[0] if not hjemme_kamper.empty else df.iloc[0]
+        # a) Foretrekk raden med eksakt kampdato. Ren strengsammenligning (ikke
+        # pd.to_datetime) – denne funksjonen ligger inne i en bred
+        # 'except Exception', så en parse-feil ville blitt svelget stille som
+        # "ingen resultat".
+        dato_treff = df[df["GAME_DATE"].astype(str).str[:10] == kamp_dato]
 
-        # "vs." → hjemmelaget sin WL-kolonne = hjemmekampens resultat
-        er_hjemmekamp = bool(hjemme_kamper.empty is False and rad.equals(hjemme_kamper.iloc[0]))
+        if not dato_treff.empty:
+            rad = dato_treff.iloc[0]
+        else:
+            # b) Ellers: kun en ekte hjemmekamp godtas. Er hjemme_kamper også
+            # tom, betyr det at eneste kamp mellom lagene i vinduet er
+            # returkampen – en annen fysisk kamp. Vi gjetter IKKE lenger på
+            # den første raden i vinduet (CR-03, 02-REVIEW.md); boten venter
+            # heller.
+            hjemme_kamper = df[df["MATCHUP"].str.contains(r"vs\.", case=False)]
+            if hjemme_kamper.empty:
+                print(f"    ⏭️  Kun returkampen funnet i søkevinduet – venter på riktig kamp")
+                return None
+            rad = hjemme_kamper.iloc[0]
+
+        # c) Bruk orienteringen i stedet for å kaste den (IN-01). Kun mulig at
+        # denne er False via datotreffet i (a) – da har NBA API motsatt
+        # hjemme/borte-orientering av Odds API for akkurat denne kampen.
+        er_hjemmekamp = "vs." in str(rad["MATCHUP"]).lower()
+        if not er_hjemmekamp:
+            print(f"    ⚠️  NBA API har motsatt hjemme/borte-orientering enn Odds API for denne kampen ({rad['MATCHUP']})")
+
+        # d) WL tilhører ALLTID laget det ble spurt på via team_id_nullable
+        # (hjemme_lag), uansett om raden er "vs." eller "@". Orienteringen
+        # avgjør derfor ALDRI hvem WL gjelder – kun om raden er RIKTIG KAMP.
+        # IKKE "fiks" dette til et orienteringsbytte, det snur alle oppgjør.
         return "hjemme" if rad["WL"] == "W" else "borte"
 
     except Exception:
         return None
-
-    return None
 
 
 def sjekk_resultater(bets, bankroll_data):

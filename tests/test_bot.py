@@ -335,3 +335,93 @@ def test_sekvens_oppgjor_og_plassering_samme_dag_gir_korrekt_historikkpunkt(monk
 
     dagens_punkt = next(h for h in bankroll_data["historikk"] if h["dato"] == i_dag)
     assert dagens_punkt["saldo"] == bankroll_data["saldo"]
+
+
+# ---------------------------------------------------------------------------
+# CR-03: velg riktig fysisk kamp ved oppgjør, aldri returkampen
+# ---------------------------------------------------------------------------
+
+
+def _stub_lag_og_finder(monkeypatch, bot, df):
+    """Monkeypatcher finn_lag og leaguegamefinder.LeagueGameFinder slik at
+    hent_kampresultat aldri tar kontakt med nettverket. df er raden/radene
+    LeagueGameFinder().get_data_frames()[0] skal returnere."""
+
+    def finn_lag_stub(navn):
+        if navn == "Miami Heat":
+            return {"id": 1610612748, "abbreviation": "MIA"}
+        if navn == "Toronto Raptors":
+            return {"id": 1610612761, "abbreviation": "TOR"}
+        return None
+
+    class FakeLeagueGameFinder:
+        def __init__(self, **kwargs):
+            pass
+
+        def get_data_frames(self):
+            return [df]
+
+    monkeypatch.setattr(bot, "finn_lag", finn_lag_stub)
+    monkeypatch.setattr(bot.leaguegamefinder, "LeagueGameFinder", FakeLeagueGameFinder)
+    monkeypatch.setattr(bot.time, "sleep", lambda *a, **k: None)
+
+
+def test_hent_kampresultat_foretrekker_eksakt_kampdato_over_vs_preferanse(monkeypatch, bot):
+    """Søkevinduet inneholder en '@'-rad på betten sin egen kampdato (WL=L) og
+    en 'vs.'-rad to dager senere (WL=W). Dagens kode gir 'hjemme' (vs.-
+    preferanse); riktig svar er 'borte' (eksakt dato)."""
+    kamp_dato = "2026-08-30"
+    df = pd.DataFrame([
+        {"GAME_DATE": kamp_dato,    "MATCHUP": "MIA @ TOR",   "WL": "L"},
+        {"GAME_DATE": "2026-09-01", "MATCHUP": "MIA vs. TOR", "WL": "W"},
+    ])
+    _stub_lag_og_finder(monkeypatch, bot, df)
+
+    resultat = bot.hent_kampresultat("Miami Heat", "Toronto Raptors", kamp_dato)
+    assert resultat == "borte"
+
+
+def test_hent_kampresultat_returnerer_none_naar_kun_returkampen_finnes(monkeypatch, bot):
+    """Eneste rad i vinduet er en '@'-rad på en ANNEN dato enn kamp_dato —
+    altså returkampen, en annen fysisk kamp. Dagens kode faller tilbake til
+    df.iloc[0] og gjør opp mot den; riktig svar er None (vent)."""
+    kamp_dato = "2026-08-30"
+    df = pd.DataFrame([
+        {"GAME_DATE": "2026-09-01", "MATCHUP": "MIA @ TOR", "WL": "W"},
+    ])
+    _stub_lag_og_finder(monkeypatch, bot, df)
+
+    resultat = bot.hent_kampresultat("Miami Heat", "Toronto Raptors", kamp_dato)
+    assert resultat is None
+
+
+def test_hent_kampresultat_normal_hjemmeseier(monkeypatch, bot):
+    kamp_dato = "2026-08-30"
+    df = pd.DataFrame([{"GAME_DATE": kamp_dato, "MATCHUP": "MIA vs. TOR", "WL": "W"}])
+    _stub_lag_og_finder(monkeypatch, bot, df)
+
+    assert bot.hent_kampresultat("Miami Heat", "Toronto Raptors", kamp_dato) == "hjemme"
+
+
+def test_hent_kampresultat_normalt_hjemmetap(monkeypatch, bot):
+    kamp_dato = "2026-08-30"
+    df = pd.DataFrame([{"GAME_DATE": kamp_dato, "MATCHUP": "MIA vs. TOR", "WL": "L"}])
+    _stub_lag_og_finder(monkeypatch, bot, df)
+
+    assert bot.hent_kampresultat("Miami Heat", "Toronto Raptors", kamp_dato) == "borte"
+
+
+def test_hent_kampresultat_ingen_kamp_mot_riktig_motstander(monkeypatch, bot):
+    kamp_dato = "2026-08-30"
+    df = pd.DataFrame([{"GAME_DATE": kamp_dato, "MATCHUP": "MIA vs. BOS", "WL": "W"}])
+    _stub_lag_og_finder(monkeypatch, bot, df)
+
+    assert bot.hent_kampresultat("Miami Heat", "Toronto Raptors", kamp_dato) is None
+
+
+def test_hent_kampresultat_tomt_svar_fra_api(monkeypatch, bot):
+    kamp_dato = "2026-08-30"
+    df = pd.DataFrame(columns=["GAME_DATE", "MATCHUP", "WL"])
+    _stub_lag_og_finder(monkeypatch, bot, df)
+
+    assert bot.hent_kampresultat("Miami Heat", "Toronto Raptors", kamp_dato) is None
