@@ -30,9 +30,14 @@ bets.json.bak
 backtests/
 nba_spillerlogg_raw.csv
 
-# Dashboard (genereres automatisk)
+# Dashboard (genereres automatisk) – public/index.html har bankroll og bets
+# bakt inn og deployes direkte til Vercel fra run_daglig.sh, aldri via git
+# (repoet er offentlig). Kun public/vercel.json og public/.vercelignore spores.
 dashboard.html
 dashboard_tom.html
+public/index.html
+.vercel/
+.env.local
 
 # Kjørelogg fra launchd-jobben (run_daglig.sh) – lokal driftsdata, samme
 # kategori som bankroll/dashboard-output

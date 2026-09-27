@@ -7,7 +7,7 @@ Hoved-boten som kjører hele pipelinen daglig:
   2. Oppdaterer bankroll
   3. Finner nye value bets for i dag
   4. Plasserer virtuelle bets (3% av bankroll, maks 150 kr)
-  5. Genererer oppdatert dashboard.html
+  5. Genererer oppdatert public/index.html (dashboardet, deployes til Vercel)
 
 Kjør daglig:
   python 06_bot.py
@@ -35,7 +35,7 @@ from strategy import beregn_innsats, finn_bet_nokkel, bygg_bet_nokler, er_duplik
 # -------------------------------------------------------
 BANKROLL_FIL      = "bankroll.json"
 BETS_FIL          = "bets.json"
-DASHBOARD_FIL     = "dashboard.html"
+DASHBOARD_FIL     = os.path.join("public", "index.html")   # public/ deployes til Vercel av run_daglig.sh
 
 # -------------------------------------------------------
 # Hjelpefunksjoner for datalagring
@@ -990,6 +990,7 @@ if (historikk.length < 2) {{
 </body>
 </html>"""
 
+    os.makedirs(os.path.dirname(DASHBOARD_FIL) or ".", exist_ok=True)
     with open(DASHBOARD_FIL, "w", encoding="utf-8") as f:
         f.write(html)
 
@@ -1089,7 +1090,7 @@ P&L:         {'+' if pnl >= 0 else ''}{pnl:.0f} kr
 ROI:         {'+' if roi >= 0 else ''}{roi}%
 Win rate:    {len(vunnet)}/{len(avsluttede)} bets
 {'='*60}
-Åpne dashboard.html i nettleseren for full oversikt!
+Åpne {DASHBOARD_FIL} i nettleseren (eller Vercel-URL-en) for full oversikt!
 """)
 
 
