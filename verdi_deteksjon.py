@@ -34,6 +34,10 @@ from teams import finn_lag_id
 KOLONNER = ["Kamp", "KampDato", "Bet", "Odds", "Bookmaker", "Modell_prob",
             "Modell %", "Bookmaker %", "Value", "Forv. EV"]
 
+# Et lag må ha spilt minst så mange Regular Season-kamper i inneværende sesong
+# før hent_siste_lagstats gir et snitt. Færre gir None, og kampen hoppes over.
+MIN_KAMPER_I_SESONG = 3
+
 
 def gjeldende_sesong():
     """
@@ -68,7 +72,7 @@ def hent_siste_lagstats(team_id, antall_kamper=10, sesong=None):
     df = logs.get_data_frames()[0].head(antall_kamper)
     time.sleep(0.5)  # Rate limiting
 
-    if len(df) < 3:
+    if len(df) < MIN_KAMPER_I_SESONG:
         return None
 
     return snitt_fra_kamplogg(df)
@@ -102,6 +106,7 @@ def finn_value_bets(modell, feature_kolonner, kamper=None, api_nokkel=None, hent
         hent_lagstats = hent_siste_lagstats
 
     value_bets = []
+    hoppet_over_uten_stats = 0
 
     for kamp in kamper:
         hjemme_navn = kamp["home_team"]
@@ -126,6 +131,7 @@ def finn_value_bets(modell, feature_kolonner, kamper=None, api_nokkel=None, hent
         borte_stats  = hent_lagstats(borte_id)
 
         if not hjemme_stats or not borte_stats:
+            hoppet_over_uten_stats += 1
             continue
 
         # Bygg feature-rad for modellen
@@ -196,6 +202,13 @@ def finn_value_bets(modell, feature_kolonner, kamper=None, api_nokkel=None, hent
                 "Value":        f"{value_borte:+.1%}",
                 "Forv. EV":     f"{ev_borte:+.1%}"
             })
+
+    # Uten denne linjen ser en sesongstart (der alle kamper hoppes over fordi
+    # lagene ikke har spilt nok kamper ennå) ut som "modellen fant ingen value".
+    if hoppet_over_uten_stats:
+        print(f"Hoppet over {hoppet_over_uten_stats} av {len(kamper)} kamper: "
+              f"for få kamper i sesongen {gjeldende_sesong()} "
+              f"(minst {MIN_KAMPER_I_SESONG} per lag kreves)")
 
     return value_bets
 

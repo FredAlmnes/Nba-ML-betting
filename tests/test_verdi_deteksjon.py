@@ -130,8 +130,11 @@ def test_finn_value_bets_hopper_over_uresolverbart_lagnavn(monkeypatch):
     assert value_bets == []
 
 
-def test_finn_value_bets_hopper_over_manglende_lagstats():
-    """Hvis hent_lagstats returnerer None for en av lagene, hoppes kampen over."""
+def test_finn_value_bets_hopper_over_manglende_lagstats(capsys):
+    """
+    Hvis hent_lagstats returnerer None for en av lagene, hoppes kampen over –
+    og det logges, så en sesongstart ikke ser ut som "ingen value funnet".
+    """
     modell = _StubModell(prob_hjemme=0.65)
     kamper = [_kamp()]
 
@@ -146,6 +149,7 @@ def test_finn_value_bets_hopper_over_manglende_lagstats():
     )
 
     assert value_bets == []
+    assert "Hoppet over 1 av 1 kamper: for få kamper i sesongen" in capsys.readouterr().out
 
 
 def test_finn_value_bets_hopper_over_kamp_uten_h2h_odds():
